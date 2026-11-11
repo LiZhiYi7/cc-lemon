@@ -7,7 +7,7 @@ roles:
     permissions: ["*"]
   - code: accountant
     name: 会计
-    permissions: [account:write, opening:write, voucher:write, closing:run, period:close, parallel:write]
+    permissions: [account:write, aux:write, opening:write, voucher:write, closing:run, period:close, parallel:write]
   - code: reviewer
     name: 审核
     permissions: [voucher:review]

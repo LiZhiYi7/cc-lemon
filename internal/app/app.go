@@ -15,6 +15,7 @@ import (
 
 	"github.com/lizhiyi7/cc-lemon/configs"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
+	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/closing"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/iam"
@@ -52,8 +53,12 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 		return nil, err
 	}
 	accounts := account.New(d, books)
-	ledgers := ledger.New(d, books, accounts)
-	vouchers := voucher.New(d, books, accounts)
+	aux := auxiliary.New(d, books, accounts)
+	if err := aux.SeedMissing(ctx, standards); err != nil {
+		return nil, err
+	}
+	ledgers := ledger.New(d, books, accounts, aux)
+	vouchers := voucher.New(d, books, accounts, aux)
 	closings := closing.New(d, books, ledgers, vouchers)
 	reports := report.New(d, books, ledgers, closings)
 
@@ -78,6 +83,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 				r.Use(books.Middleware)
 				books.Routes(r)
 				accounts.Routes(r)
+				aux.Routes(r)
 				ledgers.Routes(r)
 				vouchers.Routes(r)
 				closings.Routes(r)

@@ -209,6 +209,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Book, error) {
 				return err
 			}
 		}
+		for i, t := range std.AuxTypes {
+			if _, err := q.Exec(ctx, `insert into aux_types(book_id, code, name, sort, is_system) values($1,$2,$3,$4,true)`,
+				b.ID, t.Code, t.Name, i); err != nil {
+				return err
+			}
+		}
 		for i, r := range std.Reports {
 			if err := s.PutConfig(ctx, b.ID, KindReport, r.Code, r.Name, i, r); err != nil {
 				return err

@@ -100,6 +100,7 @@ type DetailRow struct {
 	VoucherID int64  `json:"voucher_id,omitempty"`
 	VoucherNo string `json:"voucher_no,omitempty"`
 	Account   string `json:"account,omitempty"` // 查询上级科目时显示实际记账科目
+	Aux       string `json:"aux,omitempty"`     // 辅助核算项目
 	Summary   string `json:"summary"`
 	Debit     Dec    `json:"debit"`
 	Credit    Dec    `json:"credit"`
@@ -144,7 +145,9 @@ func (s *Service) Detail(ctx context.Context, b *book.Book, accountID int64, fro
 	}
 	push("open", "期初余额", decimal.Zero, decimal.Zero)
 
-	q, err := s.db.Q(ctx).Query(ctx, `select v.year, v.month, v.vdate, v.id, v.word, v.number, l.account_id, l.summary, l.debit, l.credit
+	q, err := s.db.Q(ctx).Query(ctx, `select v.year, v.month, v.vdate, v.id, v.word, v.number, l.account_id, l.summary, l.debit, l.credit,
+			coalesce((select string_agg(i.name, ' / ' order by t.sort, t.id) from voucher_line_aux la
+				join aux_items i on i.id=la.item_id join aux_types t on t.id=la.type_id where la.line_id=l.id), '')
 		from voucher_lines l join vouchers v on v.id=l.voucher_id
 		where l.book_id=$1 and l.account_id = any($2) and v.year*100+v.month between $3 and $4
 		order by v.year, v.month, v.vdate, v.word, v.number, l.line_no`, b.ID, ids, from.YM(), to.YM())
@@ -169,9 +172,9 @@ func (s *Service) Detail(ctx context.Context, b *book.Book, accountID int64, fro
 		var y, m, number int
 		var date time.Time
 		var vid, aid int64
-		var word, summary string
+		var word, summary, aux string
 		var d, c Dec
-		if err := q.Scan(&y, &m, &date, &vid, &word, &number, &aid, &summary, &d, &c); err != nil {
+		if err := q.Scan(&y, &m, &date, &vid, &word, &number, &aid, &summary, &d, &c, &aux); err != nil {
 			return nil, err
 		}
 		for p := (kernel.Period{Year: y, Month: m}); cur.Before(p); {
@@ -181,7 +184,7 @@ func (s *Service) Detail(ctx context.Context, b *book.Book, accountID int64, fro
 		monD, monC = monD.Add(d), monC.Add(c)
 		dir, bal := dirText(net)
 		row := DetailRow{Kind: "line", Date: date.Format(time.DateOnly), VoucherID: vid,
-			VoucherNo: fmt.Sprintf("%s-%d", word, number), Summary: summary, Debit: d, Credit: c, Dir: dir, Balance: bal}
+			VoucherNo: fmt.Sprintf("%s-%d", word, number), Summary: summary, Aux: aux, Debit: d, Credit: c, Dir: dir, Balance: bal}
 		if !x.Account.IsLeaf {
 			row.Account = names[aid]
 		}
@@ -272,6 +275,7 @@ func periodRange(r *http.Request) (from, to kernel.Period, err error) {
 }
 
 func (s *Service) Routes(r chi.Router) {
+	s.auxRoutes(r)
 	r.Get("/opening", httpx.Handle(func(r *http.Request) (any, error) {
 		return s.Openings(r.Context(), book.From(r.Context()).Book.ID)
 	}))

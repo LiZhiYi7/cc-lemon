@@ -38,8 +38,14 @@ type Account struct {
 }
 
 type Service struct {
-	db    *db.DB
-	books *book.Service
+	db         *db.DB
+	books      *book.Service
+	onAddChild []func(ctx context.Context, parent *Account) error
+}
+
+// OnAddChild 注册“给某科目增加下级”前的检查（其他模块借此声明自己的约束，避免反向依赖）。
+func (s *Service) OnAddChild(fn func(ctx context.Context, parent *Account) error) {
+	s.onAddChild = append(s.onAddChild, fn)
 }
 
 func New(d *db.DB, books *book.Service) *Service { return &Service{db: d, books: books} }
@@ -73,7 +79,8 @@ func (s *Service) List(ctx context.Context, bookID int64) ([]*Account, error) {
 	return list, nil
 }
 
-func (s *Service) get(ctx context.Context, bookID, id int64) (*Account, error) {
+// Get 按 ID 取科目。
+func (s *Service) Get(ctx context.Context, bookID, id int64) (*Account, error) {
 	a, err := scan(s.db.Q(ctx).QueryRow(ctx, `select `+cols+` from accounts where book_id=$1 and id=$2`, bookID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, httpx.NotFound("科目不存在")
@@ -81,8 +88,8 @@ func (s *Service) get(ctx context.Context, bookID, id int64) (*Account, error) {
 	return a, err
 }
 
-// used 科目是否已有凭证分录或期初数据。
-func (s *Service) used(ctx context.Context, id int64) (bool, error) {
+// Used 科目是否已有凭证分录或期初数据。
+func (s *Service) Used(ctx context.Context, id int64) (bool, error) {
 	var ok bool
 	err := s.db.Q(ctx).QueryRow(ctx, `select exists(select 1 from voucher_lines where account_id=$1)
 		or exists(select 1 from opening_balances where account_id=$1 and (balance<>0 or ytd_debit<>0 or ytd_credit<>0))`, id).Scan(&ok)
@@ -119,7 +126,7 @@ func (s *Service) Create(ctx context.Context, b *book.Book, in CreateInput) (*Ac
 		var parent *Account
 		if in.ParentID != nil {
 			var err error
-			if parent, err = s.get(ctx, b.ID, *in.ParentID); err != nil {
+			if parent, err = s.Get(ctx, b.ID, *in.ParentID); err != nil {
 				return err
 			}
 			a.ParentID, a.LedgerID, a.Category, a.Level, a.IsCash = &parent.ID, parent.LedgerID, parent.Category, parent.Level+1, parent.IsCash
@@ -128,6 +135,11 @@ func (s *Service) Create(ctx context.Context, b *book.Book, in CreateInput) (*Ac
 			}
 			if a.Level > len(scheme) {
 				return httpx.BadRequest(fmt.Sprintf("科目最多 %d 级", len(scheme)))
+			}
+			for _, check := range s.onAddChild {
+				if err := check(ctx, parent); err != nil {
+					return err
+				}
 			}
 			if !strings.HasPrefix(a.Code, parent.Code) {
 				return httpx.BadRequest("下级科目编码必须以上级编码 " + parent.Code + " 开头")
@@ -179,7 +191,7 @@ func (s *Service) Create(ctx context.Context, b *book.Book, in CreateInput) (*Ac
 			}
 		}
 		audit.Log(ctx, s.db, b.ID, "account.create", "account", a.ID, in)
-		out, err = s.get(ctx, b.ID, a.ID)
+		out, err = s.Get(ctx, b.ID, a.ID)
 		return err
 	})
 	return out, err
@@ -198,7 +210,7 @@ func (s *Service) Update(ctx context.Context, b *book.Book, id int64, in UpdateI
 		if err := s.books.Lock(ctx, b.ID); err != nil {
 			return err
 		}
-		a, err := s.get(ctx, b.ID, id)
+		a, err := s.Get(ctx, b.ID, id)
 		if err != nil {
 			return err
 		}
@@ -212,7 +224,7 @@ func (s *Service) Update(ctx context.Context, b *book.Book, id int64, in UpdateI
 			if !a.IsLeaf {
 				return httpx.BadRequest("非末级科目不能修改余额方向")
 			}
-			if used, err := s.used(ctx, id); err != nil {
+			if used, err := s.Used(ctx, id); err != nil {
 				return err
 			} else if used {
 				return httpx.Conflict("科目已有数据，不能修改余额方向")
@@ -223,7 +235,7 @@ func (s *Service) Update(ctx context.Context, b *book.Book, id int64, in UpdateI
 			return err
 		}
 		audit.Log(ctx, s.db, b.ID, "account.update", "account", id, in)
-		out, err = s.get(ctx, b.ID, id)
+		out, err = s.Get(ctx, b.ID, id)
 		return err
 	})
 	return out, err
@@ -234,14 +246,14 @@ func (s *Service) Delete(ctx context.Context, b *book.Book, id int64) error {
 		if err := s.books.Lock(ctx, b.ID); err != nil {
 			return err
 		}
-		a, err := s.get(ctx, b.ID, id)
+		a, err := s.Get(ctx, b.ID, id)
 		if err != nil {
 			return err
 		}
 		if !a.IsLeaf {
 			return httpx.Conflict("请先删除下级科目")
 		}
-		if used, err := s.used(ctx, id); err != nil {
+		if used, err := s.Used(ctx, id); err != nil {
 			return err
 		} else if used {
 			return httpx.Conflict("科目已有凭证或期初数据，不能删除（可改为停用）")

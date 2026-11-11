@@ -16,6 +16,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lizhiyi7/cc-lemon/internal/kernel"
+	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/ledger"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/standard"
@@ -192,18 +193,41 @@ func (s *Service) Generate(ctx context.Context, b *book.Book, p kernel.Period, c
 		if !target.Account.IsLeaf {
 			return httpx.BadRequest(fmt.Sprintf("结转目标科目 %s %s 有下级科目，请在结转规则中指定末级科目", target.Account.Code, target.Account.Name))
 		}
+		bindings, err := s.ledgers.AuxBindings(ctx, b.ID)
+		if err != nil {
+			return err
+		}
+		if len(bindings[target.Account.ID]) > 0 {
+			return httpx.BadRequest(fmt.Sprintf("结转目标科目 %s %s 启用了辅助核算，无法自动结转", target.Account.Code, target.Account.Name))
+		}
+		combos, err := s.ledgers.ComboBalances(ctx, b.ID, p)
+		if err != nil {
+			return err
+		}
 		var debits, credits []voucher.LineInput
 		net := decimal.Zero
-		for _, x := range sources(&rule, lg.ID, set) {
-			n := x.EndNet()
-			if n.IsZero() || x.Account.ID == target.Account.ID {
-				continue
+		transfer := func(accountID int64, n Dec, aux []auxiliary.Ref) {
+			if n.IsZero() {
+				return
 			}
 			net = net.Add(n)
 			if n.IsPositive() { // 借方余额 → 贷记转出
-				credits = append(credits, voucher.LineInput{Summary: rule.Summary, AccountID: x.Account.ID, Credit: n})
+				credits = append(credits, voucher.LineInput{Summary: rule.Summary, AccountID: accountID, Credit: n, Aux: aux})
 			} else {
-				debits = append(debits, voucher.LineInput{Summary: rule.Summary, AccountID: x.Account.ID, Debit: n.Neg()})
+				debits = append(debits, voucher.LineInput{Summary: rule.Summary, AccountID: accountID, Debit: n.Neg(), Aux: aux})
+			}
+		}
+		for _, x := range sources(&rule, lg.ID, set) {
+			if x.Account.ID == target.Account.ID {
+				continue
+			}
+			if len(bindings[x.Account.ID]) == 0 {
+				transfer(x.Account.ID, x.EndNet(), nil)
+				continue
+			}
+			// 启用辅助核算的科目按项目组合逐一转平
+			for _, c := range combos[x.Account.ID] {
+				transfer(x.Account.ID, c.Net, c.Aux)
 			}
 		}
 		if len(debits)+len(credits) == 0 {

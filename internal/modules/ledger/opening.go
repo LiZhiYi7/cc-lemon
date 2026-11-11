@@ -55,6 +55,10 @@ func (s *Service) SaveOpenings(ctx context.Context, b *book.Book, items []Openin
 				pl[c.Code] = true
 			}
 		}
+		bindings, err := s.aux.Bindings(ctx, b.ID)
+		if err != nil {
+			return err
+		}
 		byID := map[int64]int{}
 		for i, a := range accounts {
 			byID[a.ID] = i
@@ -68,6 +72,9 @@ func (s *Service) SaveOpenings(ctx context.Context, b *book.Book, items []Openin
 			a := accounts[i]
 			if !a.IsLeaf {
 				return httpx.BadRequest("只能在末级科目录入期初：" + a.Code + " " + a.Name)
+			}
+			if len(bindings[a.ID]) > 0 {
+				return httpx.BadRequest("科目 " + a.Code + " " + a.Name + " 已启用辅助核算，请按辅助核算项目录入期初")
 			}
 			if pl[a.Category] && !it.Balance.IsZero() {
 				return httpx.BadRequest("损益（收支）类科目没有期初余额，只需录入本年累计发生额：" + a.Code + " " + a.Name)

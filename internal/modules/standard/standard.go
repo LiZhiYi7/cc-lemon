@@ -23,6 +23,7 @@ type Standard struct {
 	AccountCodeScheme []int            `yaml:"account_code_scheme" json:"account_code_scheme"`
 	VoucherWords      []VoucherWord    `yaml:"voucher_words" json:"voucher_words"`
 	Ledgers           []Ledger         `yaml:"ledgers" json:"ledgers"`
+	AuxTypes          []AuxType        `yaml:"aux_types" json:"-"`
 	Categories        []Category       `yaml:"categories" json:"-"`
 	Parallel          []ParallelGroup  `yaml:"parallel" json:"-"`
 	ClosingRules      []ClosingRule    `yaml:"closing_rules" json:"-"`
@@ -39,6 +40,12 @@ type Ledger struct {
 	Code    string `yaml:"code" json:"code"`
 	Name    string `yaml:"name" json:"name"`
 	Primary bool   `yaml:"primary" json:"primary"`
+}
+
+// AuxType 预置的辅助核算类别。
+type AuxType struct {
+	Code string `yaml:"code"`
+	Name string `yaml:"name"`
 }
 
 type Category struct {

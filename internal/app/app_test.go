@@ -423,3 +423,157 @@ func TestGovParallelFlow(t *testing.T) {
 	c.token = ""
 	e.expect(401, "GET", e.base+"/accounts", nil)
 }
+
+func TestAuxiliaryFlow(t *testing.T) {
+	e := newClient(t).newBook("small_enterprise", 2026, 1)
+
+	var types []struct {
+		ID   int64
+		Code string
+	}
+	e.must("GET", e.base+"/aux/types", nil, &types)
+	typeID := map[string]int64{}
+	for _, tp := range types {
+		typeID[tp.Code] = tp.ID
+	}
+	if typeID["customer"] == 0 || typeID["department"] == 0 {
+		t.Fatalf("建账应预置辅助核算类别: %+v", types)
+	}
+	item := func(tp, code, name string) int64 {
+		t.Helper()
+		var it struct{ ID int64 }
+		e.must("POST", e.base+"/aux/items", map[string]any{"type_id": typeID[tp], "code": code, "name": name}, &it)
+		return it.ID
+	}
+	custA, custB, dept := item("customer", "001", "甲公司"), item("customer", "002", "乙公司"), item("department", "01", "行政部")
+	e.expect(409, "POST", e.base+"/aux/items", map[string]any{"type_id": typeID["customer"], "code": "001", "name": "重复"})
+
+	bind := func(code string, tps ...string) (int, string) {
+		ids := []int64{}
+		for _, tp := range tps {
+			ids = append(ids, typeID[tp])
+		}
+		return e.do("PUT", fmt.Sprintf("%s/accounts/%d/aux", e.base, e.accounts[code]), map[string]any{"type_ids": ids}, nil)
+	}
+	if code, resp := bind("1122", "customer"); code >= 300 {
+		t.Fatal(resp)
+	}
+	if code, resp := bind("5602", "department"); code >= 300 {
+		t.Fatal(resp)
+	}
+	// 启用辅助核算后不能再拆下级
+	e.expect(409, "POST", e.base+"/accounts", map[string]any{"parent_id": e.accounts["1122"], "code": "112201", "name": "x"})
+
+	aux := func(tp string, id int64) []map[string]any {
+		return []map[string]any{{"type_id": typeID[tp], "item_id": id}}
+	}
+	// 期初：应收账款按客户录入，科目期初自动汇总；不能绕过项目直接录科目期初
+	e.must("PUT", fmt.Sprintf("%s/opening/aux/%d", e.base, e.accounts["1122"]), map[string]any{"items": []map[string]any{
+		{"aux": aux("customer", custA), "balance": "2000"},
+	}}, nil)
+	e.expect(400, "PUT", e.base+"/opening", map[string]any{"items": []map[string]any{{"account_id": e.accounts["1122"], "balance": "1"}}})
+	e.must("PUT", e.base+"/opening", map[string]any{"items": []map[string]any{{"account_id": e.accounts["3001"], "balance": "2000"}}}, nil)
+	var oc []struct{ Balanced bool }
+	e.must("GET", e.base+"/opening/check", nil, &oc)
+	if !oc[0].Balanced {
+		t.Fatal("期初应平衡")
+	}
+
+	post := func(date string, lines ...map[string]any) (int, string, voucherResp) {
+		var v voucherResp
+		code, resp := e.do("POST", e.base+"/vouchers", map[string]any{"date": date, "lines": lines}, &v)
+		return code, resp, v
+	}
+	ln := func(code, debit, credit string, a []map[string]any) map[string]any {
+		m := e.lines([]line{{code, debit, credit}})[0]
+		if a != nil {
+			m["aux"] = a
+		}
+		return m
+	}
+	// 缺少辅助核算项目、项目类别不符 均拒绝
+	if code, _, _ := post("2026-01-05", ln("1122", "1000", "", nil), ln("5001", "", "1000", nil)); code != 400 {
+		t.Fatalf("缺少客户应被拒绝，得到 %d", code)
+	}
+	if code, _, _ := post("2026-01-05", ln("1122", "1000", "", aux("customer", dept)), ln("5001", "", "1000", nil)); code != 400 {
+		t.Fatalf("项目类别不符应被拒绝，得到 %d", code)
+	}
+	for _, c := range []struct {
+		lines []map[string]any
+	}{
+		{[]map[string]any{ln("1122", "1000", "", aux("customer", custA)), ln("5001", "", "1000", nil)}},
+		{[]map[string]any{ln("1122", "500", "", aux("customer", custB)), ln("5001", "", "500", nil)}},
+		{[]map[string]any{ln("5602", "300", "", aux("department", dept)), ln("1122", "", "300", aux("customer", custA))}},
+	} {
+		if code, resp, _ := post("2026-01-06", c.lines...); code >= 300 {
+			t.Fatal(resp)
+		}
+	}
+	// 已有数据后不能调整绑定；已使用的项目不能删除但可停用
+	if code, _ := bind("1122"); code != 409 {
+		t.Fatalf("已有数据的科目不应允许调整辅助核算，得到 %d", code)
+	}
+	e.expect(409, "DELETE", fmt.Sprintf("%s/aux/items/%d", e.base, custA), nil)
+	e.must("PATCH", fmt.Sprintf("%s/aux/items/%d", e.base, dept), map[string]any{"enabled": false}, nil)
+
+	var ab struct {
+		Rows []struct {
+			ItemCode  string `json:"item_code"`
+			OpenDebit string `json:"open_debit"`
+			Debit     string
+			Credit    string
+			EndDebit  string `json:"end_debit"`
+		}
+		Total struct {
+			EndDebit string `json:"end_debit"`
+		}
+	}
+	e.must("GET", fmt.Sprintf("%s/ledger/aux-balance?type_id=%d&from=2026-01&to=2026-01", e.base, typeID["customer"]), nil, &ab)
+	if len(ab.Rows) != 2 {
+		t.Fatalf("辅助核算余额表应有两行: %+v", ab)
+	}
+	eq(t, "甲公司期初", ab.Rows[0].OpenDebit, "2000")
+	eq(t, "甲公司借方", ab.Rows[0].Debit, "1000")
+	eq(t, "甲公司贷方", ab.Rows[0].Credit, "300")
+	eq(t, "甲公司期末", ab.Rows[0].EndDebit, "2700")
+	eq(t, "乙公司期末", ab.Rows[1].EndDebit, "500")
+	eq(t, "合计期末", ab.Total.EndDebit, "3200")
+
+	var detail []struct {
+		Kind    string
+		Balance string
+	}
+	e.must("GET", fmt.Sprintf("%s/ledger/aux-detail?item_id=%d&from=2026-01&to=2026-01", e.base, custA), nil, &detail)
+	eq(t, "辅助明细账期初", detail[0].Balance, "2000")
+	eq(t, "辅助明细账期末", detail[len(detail)-1].Balance, "2700")
+
+	// 结转损益：带辅助核算的损益科目按项目转平（即使项目已停用）
+	var gen struct {
+		Voucher *struct {
+			Lines []struct {
+				AccountCode string `json:"account_code"`
+				Credit      string
+				Aux         []struct {
+					ItemName string `json:"item_name"`
+				}
+			}
+		}
+	}
+	e.must("POST", e.base+"/closing/2026-01/pl_transfer", nil, &gen)
+	found := false
+	for _, l := range gen.Voucher.Lines {
+		if l.AccountCode == "5602" {
+			found = len(l.Aux) == 1 && l.Aux[0].ItemName == "行政部" && l.Credit == "300"
+		}
+	}
+	if !found {
+		t.Fatalf("结转凭证应包含带部门的管理费用分录: %+v", gen.Voucher)
+	}
+	e.must("POST", e.base+"/periods/2026-01/close", nil, nil)
+	var bs reportResp
+	e.must("GET", e.base+"/reports/balance_sheet?period=2026-01", nil, &bs)
+	eq(t, "应收账款", bs.val(t, "4", "end"), "3200")
+	if !bs.Checks[0].OK {
+		t.Fatal("资产负债表应平衡")
+	}
+}

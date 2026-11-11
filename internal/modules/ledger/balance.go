@@ -12,6 +12,7 @@ import (
 
 	"github.com/lizhiyi7/cc-lemon/internal/kernel"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
+	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
 	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
 )
@@ -79,10 +80,11 @@ type Service struct {
 	db       *db.DB
 	books    *book.Service
 	accounts *account.Service
+	aux      *auxiliary.Service
 }
 
-func New(d *db.DB, books *book.Service, accounts *account.Service) *Service {
-	return &Service{db: d, books: books, accounts: accounts}
+func New(d *db.DB, books *book.Service, accounts *account.Service, aux *auxiliary.Service) *Service {
+	return &Service{db: d, books: books, accounts: accounts, aux: aux}
 }
 
 func splitSign(net Dec) (debit, credit Dec) {

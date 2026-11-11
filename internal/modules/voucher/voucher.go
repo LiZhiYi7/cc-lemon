@@ -16,6 +16,7 @@ import (
 
 	"github.com/lizhiyi7/cc-lemon/internal/kernel"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
+	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
 	"github.com/lizhiyi7/cc-lemon/internal/platform/audit"
 	"github.com/lizhiyi7/cc-lemon/internal/platform/auth"
@@ -36,14 +37,15 @@ const (
 type Dec = decimal.Decimal
 
 type Line struct {
-	ID          int64  `json:"id"`
-	LedgerID    int64  `json:"ledger_id"`
-	Summary     string `json:"summary"`
-	AccountID   int64  `json:"account_id"`
-	AccountCode string `json:"account_code"`
-	AccountName string `json:"account_name"`
-	Debit       Dec    `json:"debit"`
-	Credit      Dec    `json:"credit"`
+	ID          int64           `json:"id"`
+	LedgerID    int64           `json:"ledger_id"`
+	Summary     string          `json:"summary"`
+	AccountID   int64           `json:"account_id"`
+	AccountCode string          `json:"account_code"`
+	AccountName string          `json:"account_name"`
+	Debit       Dec             `json:"debit"`
+	Credit      Dec             `json:"credit"`
+	Aux         []auxiliary.Ref `json:"aux,omitempty"` // 辅助核算项目
 }
 
 type Voucher struct {
@@ -66,10 +68,11 @@ type Voucher struct {
 }
 
 type LineInput struct {
-	Summary   string `json:"summary"`
-	AccountID int64  `json:"account_id"`
-	Debit     Dec    `json:"debit"`
-	Credit    Dec    `json:"credit"`
+	Summary   string          `json:"summary"`
+	AccountID int64           `json:"account_id"`
+	Debit     Dec             `json:"debit"`
+	Credit    Dec             `json:"credit"`
+	Aux       []auxiliary.Ref `json:"aux"`
 }
 
 type Input struct {
@@ -85,10 +88,11 @@ type Service struct {
 	db       *db.DB
 	books    *book.Service
 	accounts *account.Service
+	aux      *auxiliary.Service
 }
 
-func New(d *db.DB, books *book.Service, accounts *account.Service) *Service {
-	return &Service{db: d, books: books, accounts: accounts}
+func New(d *db.DB, books *book.Service, accounts *account.Service, aux *auxiliary.Service) *Service {
+	return &Service{db: d, books: books, accounts: accounts, aux: aux}
 }
 
 type header struct {
@@ -122,7 +126,7 @@ func (s *Service) NextNumber(ctx context.Context, bookID int64, p kernel.Period,
 }
 
 // validate 校验分录并返回每行所属账簿、保存时的提示信息。
-func (s *Service) validate(ctx context.Context, b *book.Book, in *Input) (ledgerOf []int64, warnings []string, err error) {
+func (s *Service) validate(ctx context.Context, b *book.Book, in *Input, editing bool) (ledgerOf []int64, warnings []string, err error) {
 	if len(in.Lines) < 2 {
 		return nil, nil, httpx.BadRequest("凭证至少需要两行分录")
 	}
@@ -133,6 +137,10 @@ func (s *Service) validate(ctx context.Context, b *book.Book, in *Input) (ledger
 	byID := make(map[int64]*account.Account, len(accounts))
 	for _, a := range accounts {
 		byID[a.ID] = a
+	}
+	checker, err := s.aux.Checker(ctx, b.ID)
+	if err != nil {
+		return nil, nil, err
 	}
 	type sum struct {
 		debit, credit Dec
@@ -163,6 +171,9 @@ func (s *Service) validate(ctx context.Context, b *book.Book, in *Input) (ledger
 		l.Summary = strings.TrimSpace(l.Summary)
 		if l.Summary == "" {
 			return nil, nil, httpx.BadRequest(fmt.Sprintf("第 %d 行：请填写摘要", n))
+		}
+		if l.Aux, err = checker.Normalize(a.ID, l.Aux, editing); err != nil {
+			return nil, nil, httpx.BadRequest(fmt.Sprintf("第 %d 行（%s %s）：%s", n, a.Code, a.Name, err.Error()))
 		}
 		ledgerOf[i] = a.LedgerID
 		x := sums[a.LedgerID]
@@ -241,7 +252,8 @@ func (s *Service) Save(ctx context.Context, b *book.Book, id int64, in Input, so
 		if !wordOK {
 			return httpx.BadRequest("凭证字无效")
 		}
-		ledgerOf, w, err := s.validate(ctx, b, &in)
+		// 修改已有凭证、或由系统生成凭证（如期末结转）时，允许引用已停用的辅助核算项目
+		ledgerOf, w, err := s.validate(ctx, b, &in, id != 0 || source != SourceManual)
 		if err != nil {
 			return err
 		}
@@ -287,9 +299,15 @@ func (s *Service) Save(ctx context.Context, b *book.Book, id int64, in Input, so
 			return err
 		}
 		for i, l := range in.Lines {
-			if _, err := q.Exec(ctx, `insert into voucher_lines(voucher_id, book_id, ledger_id, line_no, summary, account_id, debit, credit)
-				values($1,$2,$3,$4,$5,$6,$7,$8)`, id, b.ID, ledgerOf[i], i+1, l.Summary, l.AccountID, l.Debit, l.Credit); err != nil {
+			var lineID int64
+			if err := q.QueryRow(ctx, `insert into voucher_lines(voucher_id, book_id, ledger_id, line_no, summary, account_id, debit, credit)
+				values($1,$2,$3,$4,$5,$6,$7,$8) returning id`, id, b.ID, ledgerOf[i], i+1, l.Summary, l.AccountID, l.Debit, l.Credit).Scan(&lineID); err != nil {
 				return err
+			}
+			for _, ref := range l.Aux {
+				if _, err := q.Exec(ctx, `insert into voucher_line_aux(line_id, type_id, item_id) values($1,$2,$3)`, lineID, ref.TypeID, ref.ItemID); err != nil {
+					return err
+				}
 			}
 		}
 		// 唯一约束为延迟校验，这里主动触发以便返回友好提示。
@@ -394,18 +412,47 @@ func (s *Service) query(ctx context.Context, where string, args ...any) ([]*Vouc
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	type pos struct {
+		v *Voucher
+		i int
+	}
+	lineAt := map[int64]pos{}
 	for rows.Next() {
 		var vid int64
 		var l Line
 		var primary bool
 		if err := rows.Scan(&vid, &l.ID, &l.LedgerID, &l.Summary, &l.AccountID, &l.AccountCode, &l.AccountName, &l.Debit, &l.Credit, &primary); err != nil {
+			rows.Close()
 			return nil, err
 		}
 		v := byID[vid]
+		lineAt[l.ID] = pos{v, len(v.Lines)}
 		v.Lines = append(v.Lines, l)
 		if primary {
 			v.Total = v.Total.Add(l.Debit)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// 分录的辅助核算项目
+	rows, err = q.Query(ctx, `select la.line_id, la.type_id, la.item_id, i.code, i.name
+		from voucher_line_aux la join voucher_lines l on l.id=la.line_id
+		join aux_items i on i.id=la.item_id join aux_types t on t.id=la.type_id
+		where l.voucher_id = any($1) order by la.line_id, t.sort, t.id`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lineID int64
+		var ref auxiliary.Ref
+		if err := rows.Scan(&lineID, &ref.TypeID, &ref.ItemID, &ref.ItemCode, &ref.ItemName); err != nil {
+			return nil, err
+		}
+		if p, ok := lineAt[lineID]; ok {
+			p.v.Lines[p.i].Aux = append(p.v.Lines[p.i].Aux, ref)
 		}
 	}
 	return list, rows.Err()

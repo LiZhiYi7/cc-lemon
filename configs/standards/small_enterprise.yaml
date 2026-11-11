@@ -14,6 +14,14 @@ voucher_words:
 ledgers:
   - {code: MAIN, name: 财务会计, primary: true}
 
+# 预置的辅助核算类别；建账后可在“辅助核算”中增加自定义类别
+aux_types:
+  - {code: customer, name: 客户}
+  - {code: supplier, name: 供应商}
+  - {code: employee, name: 职员}
+  - {code: department, name: 部门}
+  - {code: project, name: 项目}
+
 categories:
   - ledger: MAIN
     code: asset

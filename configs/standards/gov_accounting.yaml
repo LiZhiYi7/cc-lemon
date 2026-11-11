@@ -13,6 +13,15 @@ ledgers:
   - {code: FIN, name: 财务会计, primary: true}
   - {code: BUD, name: 预算会计}
 
+# 预置的辅助核算类别；建账后可在“辅助核算”中增加自定义类别
+aux_types:
+  - {code: customer, name: 客户}
+  - {code: supplier, name: 供应商}
+  - {code: employee, name: 职员}
+  - {code: department, name: 部门}
+  - {code: project, name: 项目}
+  - {code: fund_nature, name: 资金性质}
+
 categories:
   - ledger: FIN
     code: fin_asset

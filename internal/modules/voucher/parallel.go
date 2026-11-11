@@ -10,6 +10,7 @@ import (
 
 	"github.com/lizhiyi7/cc-lemon/internal/kernel"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
+	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
 	"github.com/lizhiyi7/cc-lemon/internal/platform/audit"
 	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
@@ -124,6 +125,10 @@ func (s *Service) SuggestParallel(ctx context.Context, b *book.Book, lines []Lin
 	if err != nil {
 		return nil, err
 	}
+	checker, err := s.aux.Checker(ctx, b.ID)
+	if err != nil {
+		return nil, err
+	}
 	byID := map[int64]*account.Account{}
 	type codeKey struct {
 		ledger int64
@@ -185,8 +190,17 @@ func (s *Service) SuggestParallel(ctx context.Context, b *book.Book, lines []Lin
 			if !t.IsLeaf {
 				out.Warnings = append(out.Warnings, fmt.Sprintf("%s %s 有下级科目，请改选末级科目", t.Code, t.Name))
 			}
-			out.Lines = append(out.Lines, Line{LedgerID: t.LedgerID, Summary: l.Summary, AccountID: t.ID,
-				AccountCode: t.Code, AccountName: t.FullName, Debit: l.Debit, Credit: l.Credit})
+			line := Line{LedgerID: t.LedgerID, Summary: l.Summary, AccountID: t.ID,
+				AccountCode: t.Code, AccountName: t.FullName, Debit: l.Debit, Credit: l.Credit}
+			// 目标科目启用的辅助核算类别若来源分录也有，则沿用同一项目；其余留给用户补选
+			for _, typeID := range checker.Required(t.ID) {
+				for _, ref := range l.Aux {
+					if ref.TypeID == typeID && ref.ItemID != 0 {
+						line.Aux = append(line.Aux, auxiliary.Ref{TypeID: typeID, ItemID: ref.ItemID})
+					}
+				}
+			}
+			out.Lines = append(out.Lines, line)
 		}
 	}
 	if !triggered {
