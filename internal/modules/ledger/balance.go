@@ -96,6 +96,12 @@ func splitSign(net Dec) (debit, credit Dec) {
 
 // Balances 计算区间 [from, to] 的全科目余额。excludeSources 为计算“实际发生额”时要剔除的凭证来源。
 func (s *Service) Balances(ctx context.Context, b *book.Book, from, to kernel.Period, excludeSources []string) (*Set, error) {
+	return s.BalancesByAux(ctx, b, from, to, excludeSources, 0)
+}
+
+// BalancesByAux 同 Balances，但 auxItemID 非零时只统计带该辅助核算项目的期初与分录
+// （用于报表按资金性质、部门等口径取数）。
+func (s *Service) BalancesByAux(ctx context.Context, b *book.Book, from, to kernel.Period, excludeSources []string, auxItemID int64) (*Set, error) {
 	accounts, err := s.accounts.List(ctx, b.ID)
 	if err != nil {
 		return nil, err
@@ -120,7 +126,13 @@ func (s *Service) Balances(ctx context.Context, b *book.Book, from, to kernel.Pe
 	inStartYear := to.Year == b.StartYear
 
 	// 1) 期初数据
-	rows, err := q.Query(ctx, `select account_id, balance, ytd_debit, ytd_credit from opening_balances where book_id=$1`, b.ID)
+	openingSQL := `select account_id, balance, ytd_debit, ytd_credit from opening_balances where book_id=$1 and $2=0`
+	if auxItemID != 0 {
+		openingSQL = `select oa.account_id, sum(oa.balance), sum(oa.ytd_debit), sum(oa.ytd_credit)
+			from opening_aux oa join opening_aux_items oi on oi.opening_id=oa.id
+			where oa.book_id=$1 and oi.item_id=$2 group by oa.account_id`
+	}
+	rows, err := q.Query(ctx, openingSQL, b.ID, auxItemID)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +185,8 @@ func (s *Service) Balances(ctx context.Context, b *book.Book, from, to kernel.Pe
 			coalesce(sum(l.credit) filter (where v.year = $4 and v.source <> all($5)), 0)
 		from voucher_lines l join vouchers v on v.id = l.voucher_id
 		where l.book_id = $1 and v.year*100+v.month <= $3
-		group by l.account_id`, b.ID, from.YM(), to.YM(), to.Year, excludeSources)
+			and ($6 = 0 or exists(select 1 from voucher_line_aux x where x.line_id = l.id and x.item_id = $6))
+		group by l.account_id`, b.ID, from.YM(), to.YM(), to.Year, excludeSources, auxItemID)
 	if err != nil {
 		return nil, err
 	}

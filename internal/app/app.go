@@ -60,7 +60,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 	ledgers := ledger.New(d, books, accounts, aux)
 	vouchers := voucher.New(d, books, accounts, aux)
 	closings := closing.New(d, books, ledgers, vouchers, aux)
-	reports := report.New(d, books, ledgers, closings)
+	reports := report.New(d, books, ledgers, aux, closings)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)

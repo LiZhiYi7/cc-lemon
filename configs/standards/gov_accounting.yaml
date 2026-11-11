@@ -236,6 +236,8 @@ closing_rules:
     source_accounts: [3301]
     target: 3302
     summary: 本期盈余转入本年盈余分配
+    exclude_from_activity: true
+
   - code: fin_year_accumulate
     name: 结转累计盈余
     ledger: FIN
@@ -246,6 +248,8 @@ closing_rules:
 
   # ---- 预算会计年末结转（按顺序执行）----
   # 预算收入、支出按资金性质分别转入：财政拨款结转 / 非财政拨款结转 / 其他结余 / 经营结余。
+    exclude_from_activity: true
+
   - code: bud_fiscal
     name: 结转财政拨款收支
     ledger: BUD
@@ -298,6 +302,8 @@ closing_rules:
     source_accounts: [8501]
     target: 8701
     summary: 其他结余转入非财政拨款结余分配
+    exclude_from_activity: true
+
   - code: bud_operating_distribution
     name: 经营结余转入结余分配
     ledger: BUD
@@ -306,6 +312,8 @@ closing_rules:
     only_if: credit
     target: 8701
     summary: 经营结余转入非财政拨款结余分配
+    exclude_from_activity: true
+
   - code: bud_distribution
     name: 结余分配转入非财政拨款结余
     ledger: BUD
@@ -313,6 +321,7 @@ closing_rules:
     source_accounts: [8701]
     target: 8202
     summary: 非财政拨款结余分配转入非财政拨款结余
+    exclude_from_activity: true
 
 reports:
   - code: balance_sheet
@@ -456,3 +465,56 @@ reports:
       - {key: 18, name: 债务还本支出, indent: 1, terms: [7701]}
       - {key: 19, name: 其他支出, indent: 1, terms: [7901]}
       - {key: 20, name: 三、本年预算收支差额, bold: true, sum: "1-11"}
+
+  # 净资产变动表：矩阵式报表，每行按列分别取数（cells）；“净资产合计”为列间公式。
+  # 说明：直接记入“累计盈余”的调整全部列在（三）；用专用基金购置资产而转入累计盈余的部分未单独拆分。
+  - code: net_asset_changes
+    name: 净资产变动表
+    ledger: FIN
+    layout: list
+    columns:
+      - {key: acc, name: 累计盈余}
+      - {key: fund, name: 专用基金}
+      - {key: equity, name: 权益法调整}
+      - {key: total, name: 净资产合计, sum: "acc+fund+equity"}
+    rows:
+      - {key: 1, name: 一、上年年末余额, bold: true, cells: {acc: ["3001:YBC", "3301:YBC", "3302:YBC", "3401:YBC", "3501:YBC"], fund: ["3101:YBC"], equity: ["3201:YBC"]}}
+      - {key: 2, name: 二、以前年度盈余调整（减少以“-”号填列）, cells: {acc: ["3501:YAMT"]}}
+      - {key: 3, name: 三、本年年初余额, bold: true, sum: "1+2"}
+      - {key: 4, name: 四、本年变动金额（减少以“-”号填列）, bold: true, sum: "5+6+7+8+9+10"}
+      - {key: 5, name: （一）本年盈余, indent: 1, cells: {acc: ["@fin_revenue:YAMT", "-@fin_expense:YAMT"]}}
+      - {key: 6, name: （二）无偿调拨净资产, indent: 1, cells: {acc: ["3401:YAMT"]}}
+      - {key: 7, name: （三）归集调整预算结转结余, indent: 1, cells: {acc: ["3001:YAMT"]}}
+      - {key: 8, name: （四）提取或设置专用基金, indent: 1, cells: {acc: ["3302:YAMT"], fund: ["3101:YCA"]}}
+      - {key: 9, name: （五）使用专用基金, indent: 1, cells: {fund: ["-3101:YDA"]}}
+      - {key: 10, name: （六）权益法调整, indent: 1, cells: {equity: ["3201:YAMT"]}}
+      - {key: 11, name: 五、本年年末余额, bold: true, sum: "3+4"}
+
+  # 预算结转结余变动表：单列“计算列”，各行用绝对规则取数；收支差额按“资金性质”拆分。
+  # 年末结转完成后，年初 + 本年变动 = 年末。
+  - code: budget_carryover_changes
+    name: 预算结转结余变动表
+    ledger: BUD
+    layout: list
+    columns:
+      - {key: year, name: 本年数}
+    rows:
+      - {key: 1, name: 一、年初预算结转结余, bold: true, sum: "2+3"}
+      - {key: 2, name: （一）财政拨款结转结余, indent: 1, terms: ["8101:YBC", "8102:YBC"]}
+      - {key: 3, name: （二）其他资金结转结余, indent: 1, terms: ["8201:YBC", "8202:YBC", "8301:YBC", "8401:YBC", "8501:YBC", "8701:YBC"]}
+      - {key: 4, name: 二、本年变动金额（减少以“-”号填列）, bold: true, sum: "5+8"}
+      - {key: 5, name: （一）财政拨款结转结余, indent: 1, sum: "6+7"}
+      - {key: 6, name: 1．本年收支差额, indent: 2, terms: ["6001:YAMT", "-@bud_expense:YAMT#fund_nature=01"]}
+      - {key: 7, name: 2．年初余额调整、归集调入、上缴或调出（净额）, indent: 2, terms: ["8101:YAMT", "8102:YAMT"]}
+      - {key: 8, name: （二）其他资金结转结余, indent: 1, sum: "9+10"}
+      - {key: 9, name: 1．本年收支差额, indent: 2, terms: ["@bud_revenue:YAMT", "-6001:YAMT", "-@bud_expense:YAMT", "@bud_expense:YAMT#fund_nature=01"]}
+      - {key: 10, name: 2．年初余额调整、缴回资金、使用专用结余、支付所得税等（净额）, indent: 2, terms: ["8201:YAMT", "8202:YAMT", "8301:YAMT", "8401:YAMT", "8501:YAMT", "8701:YAMT"]}
+      - {key: 11, name: 三、年末预算结转结余, bold: true, sum: "12+15"}
+      - {key: 12, name: （一）财政拨款结转结余, indent: 1, sum: "13+14"}
+      - {key: 13, name: 1．财政拨款结转, indent: 2, terms: ["8101:EC"]}
+      - {key: 14, name: 2．财政拨款结余, indent: 2, terms: ["8102:EC"]}
+      - {key: 15, name: （二）其他资金结转结余, indent: 1, sum: "16+17+18+19"}
+      - {key: 16, name: 1．非财政拨款结转, indent: 2, terms: ["8201:EC"]}
+      - {key: 17, name: 2．非财政拨款结余, indent: 2, terms: ["8202:EC", "8501:EC", "8701:EC"]}
+      - {key: 18, name: 3．专用结余, indent: 2, terms: ["8301:EC"]}
+      - {key: 19, name: 4．经营结余（如有余额，以“-”号填列）, indent: 2, terms: ["8401:EC"]}

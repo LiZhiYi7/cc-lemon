@@ -696,6 +696,26 @@ func TestGovBudgetYearEnd(t *testing.T) {
 	e.must("GET", e.base+"/reports/budget_revenue_expense?period=2026-12", nil, &bud)
 	eq(t, "预算收入", bud.val(t, "1", "month"), "17800")
 	eq(t, "预算收支差额", bud.val(t, "20", "month"), "12800")
+	// 预算结转结余变动表：收支差额按资金性质拆分，年初 + 变动 = 年末
+	var bc reportResp
+	e.must("GET", e.base+"/reports/budget_carryover_changes?period=2026-12", nil, &bc)
+	eq(t, "财政拨款收支差额", bc.val(t, "6", "year"), "7000")
+	eq(t, "其他资金收支差额", bc.val(t, "9", "year"), "5800")
+	eq(t, "本年变动", bc.val(t, "4", "year"), "12800")
+	eq(t, "年末财政拨款结转", bc.val(t, "13", "year"), "7000")
+	eq(t, "年末非财政拨款结转", bc.val(t, "16", "year"), "1500")
+	eq(t, "年末非财政拨款结余", bc.val(t, "17", "year"), "4300")
+	eq(t, "年末预算结转结余", bc.val(t, "11", "year"), "12800")
+	// 净资产变动表：本年盈余 = 收入 17800 − 费用 4800，年末与资产负债表净资产一致
+	var na, fbs reportResp
+	e.must("GET", e.base+"/reports/net_asset_changes?period=2026-12", nil, &na)
+	eq(t, "本年盈余", na.val(t, "5", "acc"), "13000")
+	eq(t, "年末累计盈余", na.val(t, "11", "acc"), "13000")
+	eq(t, "年末净资产合计", na.val(t, "11", "total"), "13000")
+	e.must("GET", e.base+"/reports/balance_sheet?period=2026-12", nil, &fbs)
+	eq(t, "资产负债表净资产合计", fbs.val(t, "66", "end"), "13000")
+	eq(t, "资产负债表累计盈余", fbs.val(t, "61", "end"), "13000")
+
 	e.must("POST", e.base+"/closing/2026-12", nil, nil)
 	e.must("GET", e.base+"/reports/budget_revenue_expense?period=2026-12", nil, &bud)
 	eq(t, "重复结转后预算收入", bud.val(t, "1", "month"), "17800")

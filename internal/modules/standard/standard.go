@@ -122,11 +122,13 @@ type ReportTemplate struct {
 }
 
 // ReportColumn 取数口径：At 为时点（period_end | year_begin），Range 为区间（period | ytd）。
+// 两者都不写的是“计算列”：取数项必须自带绝对规则（如 YBC、YAMT），或用 Sum 由同行其他列计算。
 type ReportColumn struct {
 	Key   string `yaml:"key" json:"key"`
 	Name  string `yaml:"name" json:"name"`
 	At    string `yaml:"at" json:"at,omitempty"`
 	Range string `yaml:"range" json:"range,omitempty"`
+	Sum   string `yaml:"sum" json:"sum,omitempty"` // 列间公式，如 "a+b+c"
 }
 
 // ReportRow 报表行。Terms 与 Sum 二选一：
@@ -138,14 +140,16 @@ type ReportColumn struct {
 //
 //	AMT 实际发生额(按科目方向) / DA 借方发生额 / CA 贷方发生额
 type ReportRow struct {
-	Key    Str    `yaml:"key" json:"key,omitempty"`
-	Name   string `yaml:"name" json:"name"`
-	Side   string `yaml:"side" json:"side,omitempty"` // two_side 布局：left | right
-	Nat    string `yaml:"nat" json:"nat,omitempty"`   // 时点列默认方向 D | C
-	Terms  []Str  `yaml:"terms" json:"terms,omitempty"`
-	Sum    string `yaml:"sum" json:"sum,omitempty"`
-	Indent int    `yaml:"indent" json:"indent,omitempty"`
-	Bold   bool   `yaml:"bold" json:"bold,omitempty"`
+	Key   Str    `yaml:"key" json:"key,omitempty"`
+	Name  string `yaml:"name" json:"name"`
+	Side  string `yaml:"side" json:"side,omitempty"` // two_side 布局：left | right
+	Nat   string `yaml:"nat" json:"nat,omitempty"`   // 时点列默认方向 D | C
+	Terms []Str  `yaml:"terms" json:"terms,omitempty"`
+	Sum   string `yaml:"sum" json:"sum,omitempty"`
+	// Cells 矩阵式报表：按列分别指定取数项（列 key → terms），优先于 Terms。
+	Cells  map[string][]Str `yaml:"cells" json:"cells,omitempty"`
+	Indent int              `yaml:"indent" json:"indent,omitempty"`
+	Bold   bool             `yaml:"bold" json:"bold,omitempty"`
 }
 
 type ReportCheck struct {
