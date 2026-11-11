@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { http } from '@/api/http'
 import type { GeneralAccount } from '@/api/types'
+import ExportButton from '@/components/ExportButton.vue'
 import { useBook } from '@/stores/book'
 import { fmt } from '@/utils/money'
 import { periodStr } from '@/utils/period'
@@ -34,6 +35,7 @@ const print = () => window.print()
       <PeriodRange v-model:from="q.from" v-model:to="q.to" />
       <el-button type="primary" @click="load">查询</el-button>
       <span class="spacer" />
+      <ExportButton name="总账" :suffix="q.from === q.to ? q.from : `${q.from}至${q.to}`" />
       <el-button @click="print">打印</el-button>
     </div>
     <div v-loading="loading" class="sheet-wrap">

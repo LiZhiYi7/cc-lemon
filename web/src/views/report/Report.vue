@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { http } from '@/api/http'
 import type { ReportResult, ReportRow } from '@/api/types'
+import ExportButton from '@/components/ExportButton.vue'
 import { useBook } from '@/stores/book'
 import { fmt } from '@/utils/money'
 import { periodStr } from '@/utils/period'
@@ -41,6 +42,7 @@ const print = () => window.print()
       <h2 class="page-title">{{ data?.name }}</h2>
       <el-date-picker v-model="period" type="month" value-format="YYYY-MM" format="YYYY年M月" :clearable="false" style="width: 140px" @change="load" />
       <span class="spacer" />
+      <ExportButton :name="data?.name ?? '报表'" :suffix="period" />
       <el-button @click="print">打印</el-button>
     </div>
     <el-alert v-for="c in failed" :key="c.name" type="warning" show-icon :closable="false" style="margin-bottom: 10px"

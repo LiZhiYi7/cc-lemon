@@ -741,3 +741,97 @@ func TestGovOperatingLossStays(t *testing.T) {
 		}
 	}
 }
+
+// 批量导入：整批生效或整批不生效；导入走与手工录入相同的校验。
+func TestImport(t *testing.T) {
+	e := newClient(t).newBook("small_enterprise", 2026, 1)
+	type result struct {
+		Applied                     bool
+		Created, Updated, Unchanged int
+		Errors                      []struct {
+			Row     int
+			Message string
+		}
+	}
+	lid := e.ledgers["MAIN"]
+
+	// 有一行出错 → 全部不生效
+	var res result
+	e.must("POST", e.base+"/import/accounts", map[string]any{"ledger_id": lid, "rows": []map[string]any{
+		{"row": 2, "code": "100201", "name": "工商银行"},
+		{"row": 3, "code": "999901", "name": "上级不存在"},
+	}}, &res)
+	if res.Applied || len(res.Errors) != 1 || res.Errors[0].Row != 3 {
+		t.Fatalf("应整批失败并指出第 3 行: %+v", res)
+	}
+	e.reload()
+	if e.accounts["100201"] != 0 {
+		t.Fatal("失败的导入不应留下数据")
+	}
+
+	// 新增下级（乱序）、新增一级、改名、未变化、带辅助核算
+	e.must("POST", e.base+"/import/accounts", map[string]any{"ledger_id": lid, "rows": []map[string]any{
+		{"row": 2, "code": "10020101", "name": "基本户"},
+		{"row": 3, "code": "100201", "name": "工商银行"},
+		{"row": 4, "code": "1001", "name": "现金"},
+		{"row": 5, "code": "1002", "name": "银行存款"},
+		{"row": 6, "code": "1124", "name": "应收代垫款", "category": "资产", "direction": "借", "aux": "客户、部门"},
+	}}, &res)
+	if !res.Applied || res.Created != 3 || res.Updated != 1 || res.Unchanged != 1 {
+		t.Fatalf("科目导入结果不符: %+v", res)
+	}
+	e.reload()
+
+	var types []struct {
+		ID   int64
+		Code string
+	}
+	e.must("GET", e.base+"/aux/types", nil, &types)
+	var customer int64
+	for _, tp := range types {
+		if tp.Code == "customer" {
+			customer = tp.ID
+		}
+	}
+	items := []map[string]any{{"row": 2, "code": "001", "name": "甲公司"}, {"row": 3, "code": "002", "name": "乙公司", "remark": "重点客户"}}
+	e.must("POST", e.base+"/import/aux-items", map[string]any{"type_id": customer, "rows": items}, &res)
+	if !res.Applied || res.Created != 2 {
+		t.Fatalf("辅助核算项目导入结果不符: %+v", res)
+	}
+	items[0]["name"] = "甲公司（更名）"
+	e.must("POST", e.base+"/import/aux-items", map[string]any{"type_id": customer, "rows": items}, &res)
+	if !res.Applied || res.Updated != 1 || res.Unchanged != 1 {
+		t.Fatalf("重复导入应只更新变化的行: %+v", res)
+	}
+
+	// 期初：普通科目 + 按客户的应收账款
+	if code, resp := e.do("PUT", fmt.Sprintf("%s/accounts/%d/aux", e.base, e.accounts["1122"]), map[string]any{"type_ids": []int64{customer}}, nil); code >= 300 {
+		t.Fatal(resp)
+	}
+	e.must("POST", e.base+"/import/openings", map[string]any{"ledger_id": lid, "rows": []map[string]any{
+		{"row": 2, "code": "1001", "balance": "1,000.00"},
+		{"row": 3, "code": "1002", "balance": "99999"}, // 非末级：忽略
+		{"row": 4, "code": "10020101", "balance": "50000"},
+		{"row": 5, "code": "1122", "balance": "3000", "aux": map[string]string{"客户": "001 甲公司（更名）"}},
+		{"row": 6, "code": "1122", "balance": "2000", "aux": map[string]string{"客户": "002"}},
+		{"row": 7, "code": "3001", "balance": "56000"},
+	}}, &res)
+	if !res.Applied {
+		t.Fatalf("期初导入失败: %+v", res)
+	}
+	var oc []struct {
+		Debit    string
+		Balanced bool
+	}
+	e.must("GET", e.base+"/opening/check", nil, &oc)
+	if !oc[0].Balanced || oc[0].Debit != "56000" {
+		t.Fatalf("导入后期初应平衡且借方合计 56000: %+v", oc)
+	}
+	// 缺少辅助核算项目的行会被指出
+	e.must("POST", e.base+"/import/openings", map[string]any{"ledger_id": lid, "rows": []map[string]any{
+		{"row": 2, "code": "1122", "balance": "1"},
+	}}, &res)
+	if res.Applied || len(res.Errors) != 1 || res.Errors[0].Row != 2 {
+		t.Fatalf("缺少客户应报错: %+v", res)
+	}
+}

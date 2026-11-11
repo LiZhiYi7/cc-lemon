@@ -5,6 +5,8 @@ import { http } from '@/api/http'
 import type { Account } from '@/api/types'
 import { useBook } from '@/stores/book'
 import LedgerSwitch from '@/components/LedgerSwitch.vue'
+import ImportDialog, { type ImportResult } from '@/components/ImportDialog.vue'
+import { writeSheet, type SheetRow } from '@/utils/excel'
 
 const book = useBook()
 const ledgerId = ref(book.primaryLedger!.id)
@@ -16,6 +18,52 @@ const scheme = computed(() => book.detail!.settings.account_code_scheme)
 const rows = computed(() => book.accounts.filter((a) => a.ledger_id === ledgerId.value && a.category === category.value))
 function onLedger() {
   category.value = categories.value[0]?.code ?? ''
+}
+
+// ---- Excel 导出 / 导入（当前账簿的全部科目）----
+const HEADERS = ['科目编码', '科目名称', '类别', '余额方向', '现金类', '辅助核算']
+const importVisible = ref(false)
+const ledgerName = computed(() => book.ledgers.find((l) => l.id === ledgerId.value)?.name ?? '')
+async function exportAccounts() {
+  const catName = new Map(categories.value.map((c) => [c.code, c.name]))
+  const rows = book.ledgerAccounts(ledgerId.value).map((a) => [
+    a.code,
+    a.name,
+    catName.get(a.category) ?? '',
+    a.direction === 'D' ? '借' : '贷',
+    a.is_cash ? '是' : '',
+    auxNames(a),
+  ])
+  await writeSheet(
+    `${book.detail!.name}-会计科目${book.multiLedger ? '-' + ledgerName.value : ''}`,
+    HEADERS,
+    rows,
+    [
+      '科目编码：必填。编码方案 ' + scheme.value.join('-') + '，下级科目编码以上级编码开头。',
+      '科目名称：必填。编码已存在的科目只更新名称，其余列不会修改。',
+      '类别：新增一级科目时必填，可选值：' + categories.value.map((c) => c.name).join('、') + '。下级科目自动继承。',
+      '余额方向：借 / 贷。下级科目留空则与上级相同。',
+      '现金类：填“是”表示库存现金、银行存款等现金类科目。',
+      '辅助核算：新增科目时可填辅助核算类别名称，多个用顿号分隔。',
+      '导入时只要有一行有问题，整个文件都不会导入。',
+    ].join('\n'),
+  )
+}
+async function importAccounts(rows: SheetRow[]): Promise<ImportResult> {
+  const res = await http.post<ImportResult>(`${book.base}/import/accounts`, {
+    ledger_id: ledgerId.value,
+    rows: rows.map((r) => ({
+      row: r.row,
+      code: r.values['科目编码'] ?? '',
+      name: r.values['科目名称'] ?? '',
+      category: r.values['类别'] ?? '',
+      direction: r.values['余额方向'] ?? '',
+      is_cash: r.values['现金类'] ?? '',
+      aux: r.values['辅助核算'] ?? '',
+    })),
+  })
+  if (res.applied) await Promise.all([book.reloadAccounts(), book.reloadAux()])
+  return res
 }
 
 const visible = ref(false)
@@ -89,6 +137,8 @@ async function remove(a: Account) {
       <LedgerSwitch v-model="ledgerId" @change="onLedger" />
       <span class="muted">编码方案 {{ scheme.join('-') }}</span>
       <span class="spacer" />
+      <el-button @click="exportAccounts">导出 Excel</el-button>
+      <el-button v-if="canWrite" @click="importVisible = true">导入</el-button>
       <el-button v-if="canWrite" type="primary" @click="openCreate(null)">新增一级科目</el-button>
     </div>
     <el-tabs v-model="category" type="card">
@@ -124,6 +174,15 @@ async function remove(a: Account) {
       </tbody>
     </table>
   </div>
+
+  <ImportDialog
+    v-model="importVisible"
+    :title="`导入会计科目${book.multiLedger ? '（' + ledgerName + '）' : ''}`"
+    :required="['科目编码', '科目名称']"
+    :tips="['编码不存在的科目会新增；已存在的只更新名称', '上级科目须已存在，或与下级在同一个文件里', '任何一行有问题，整个文件都不会导入']"
+    :template="exportAccounts"
+    :submit="importAccounts"
+  />
 
   <el-dialog v-model="visible" :title="editing ? '编辑科目' : parent ? `新增下级科目（上级：${parent.code} ${parent.name}）` : '新增一级科目'" width="520px">
     <el-alert v-if="parent?.is_leaf" type="info" :closable="false" show-icon style="margin-bottom: 12px"

@@ -4,6 +4,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { http } from '@/api/http'
 import type { AuxItem, AuxType } from '@/api/types'
 import { useBook } from '@/stores/book'
+import ImportDialog, { type ImportResult } from '@/components/ImportDialog.vue'
+import { writeSheet, type SheetRow } from '@/utils/excel'
 
 const book = useBook()
 const canWrite = computed(() => book.can('aux:write'))
@@ -13,6 +15,24 @@ const items = computed(() => book.auxItemsOf(typeId.value))
 const usedBy = computed(() =>
   book.accounts.filter((a) => book.auxBindings[a.id]?.includes(typeId.value)).map((a) => `${a.code} ${a.name}`),
 )
+
+const importVisible = ref(false)
+async function exportItems() {
+  await writeSheet(
+    `${book.detail!.name}-${type.value!.name}`,
+    ['编码', '名称', '备注'],
+    items.value.map((i) => [i.code, i.name, i.remark]),
+    '编码、名称必填。编码已存在的项目会更新名称和备注，不存在的会新增。\n导入时只要有一行有问题，整个文件都不会导入。',
+  )
+}
+async function importItems(rows: SheetRow[]): Promise<ImportResult> {
+  const res = await http.post<ImportResult>(`${book.base}/import/aux-items`, {
+    type_id: typeId.value,
+    rows: rows.map((r) => ({ row: r.row, code: r.values['编码'] ?? '', name: r.values['名称'] ?? '', remark: r.values['备注'] ?? '' })),
+  })
+  if (res.applied) await book.reloadAux()
+  return res
+}
 
 const visible = ref(false)
 const form = reactive({ id: 0, code: '', name: '', remark: '' })
@@ -72,8 +92,10 @@ async function removeType() {
       <span class="spacer" />
       <template v-if="canWrite">
         <el-button @click="addType">新增类别</el-button>
+        <el-button v-if="type" @click="importVisible = true">导入</el-button>
         <el-button v-if="type" type="primary" @click="open()">新增{{ type.name }}</el-button>
       </template>
+      <el-button v-if="type" @click="exportItems">导出 Excel</el-button>
     </div>
     <el-tabs v-model="typeId" type="card">
       <el-tab-pane v-for="t in book.auxTypes" :key="t.id" :name="t.id" :label="t.name" />
@@ -116,6 +138,16 @@ async function removeType() {
       </table>
     </template>
   </div>
+
+  <ImportDialog
+    v-if="type"
+    v-model="importVisible"
+    :title="`导入${type.name}`"
+    :required="['编码', '名称']"
+    :tips="['编码不存在的会新增；已存在的更新名称和备注', '任何一行有问题，整个文件都不会导入']"
+    :template="exportItems"
+    :submit="importItems"
+  />
 
   <el-dialog v-model="visible" :title="(form.id ? '编辑' : '新增') + (type?.name ?? '')" width="440px">
     <el-form label-width="70px" @submit.prevent>

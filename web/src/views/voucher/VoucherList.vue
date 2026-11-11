@@ -8,6 +8,7 @@ import { useBook } from '@/stores/book'
 import { fmt } from '@/utils/money'
 import { parsePeriod, periodStr } from '@/utils/period'
 import PeriodRange from '@/components/PeriodRange.vue'
+import ExportButton from '@/components/ExportButton.vue'
 
 const book = useBook()
 const router = useRouter()
@@ -76,6 +77,7 @@ const open = (v: Voucher) => router.push(`/b/${detail.id}/vouchers/${v.id}`)
         <el-button :disabled="!selected.size" @click="review(true)">审核</el-button>
         <el-button :disabled="!selected.size" @click="review(false)">取消审核</el-button>
       </template>
+      <ExportButton name="凭证列表" :suffix="filter.from === filter.to ? filter.from : `${filter.from}至${filter.to}`" />
       <template v-if="book.can('voucher:write')">
         <el-button :disabled="filter.from !== filter.to" title="仅可对单个期间整理" @click="renumber">整理凭证号</el-button>
         <el-button type="primary" @click="router.push(`/b/${detail.id}/vouchers/new`)">新增凭证</el-button>

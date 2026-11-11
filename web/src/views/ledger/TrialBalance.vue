@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { http } from '@/api/http'
 import type { TrialRow } from '@/api/types'
+import ExportButton from '@/components/ExportButton.vue'
 import { useBook } from '@/stores/book'
 import { fmt } from '@/utils/money'
 import { periodStr } from '@/utils/period'
@@ -43,6 +44,7 @@ const print = () => window.print()
       <el-checkbox v-model="q.show_zero">显示无数据科目</el-checkbox>
       <el-button type="primary" @click="load">查询</el-button>
       <span class="spacer" />
+      <ExportButton name="科目余额表" :suffix="q.from === q.to ? q.from : `${q.from}至${q.to}`" />
       <el-button @click="print">打印</el-button>
     </div>
     <div v-loading="loading" class="sheet-wrap">

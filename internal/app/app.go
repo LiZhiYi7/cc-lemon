@@ -18,6 +18,7 @@ import (
 	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/closing"
+	"github.com/lizhiyi7/cc-lemon/internal/modules/dataio"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/iam"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/ledger"
 	"github.com/lizhiyi7/cc-lemon/internal/modules/report"
@@ -61,6 +62,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 	vouchers := voucher.New(d, books, accounts, aux)
 	closings := closing.New(d, books, ledgers, vouchers, aux)
 	reports := report.New(d, books, ledgers, aux, closings)
+	imports := dataio.New(d, books, accounts, aux, ledgers)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -88,6 +90,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 				vouchers.Routes(r)
 				closings.Routes(r)
 				reports.Routes(r)
+				imports.Routes(r)
 			})
 		})
 		r.NotFound(func(w http.ResponseWriter, r *http.Request) {

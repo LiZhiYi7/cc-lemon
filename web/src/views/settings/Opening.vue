@@ -8,6 +8,8 @@ import { fmt, fmtCents, fromCents, toCents } from '@/utils/money'
 import { periodStr } from '@/utils/period'
 import LedgerSwitch from '@/components/LedgerSwitch.vue'
 import AuxSelect from '@/components/AuxSelect.vue'
+import ImportDialog, { type ImportResult } from '@/components/ImportDialog.vue'
+import { writeSheet, type SheetRow } from '@/utils/excel'
 
 type Field = 'balance' | 'ytd_debit' | 'ytd_credit'
 const book = useBook()
@@ -97,6 +99,67 @@ async function save() {
 }
 const check = computed(() => checks.value.find((c) => c.ledger_id === ledgerId.value))
 
+// ---- Excel 导出 / 导入（当前账簿）----
+const importVisible = ref(false)
+const ledgerName = computed(() => book.ledgers.find((l) => l.id === ledgerId.value)?.name ?? '')
+/** 当前账簿中被科目启用的辅助核算类别，作为 Excel 中的列。 */
+const auxColumns = computed(() => {
+  const ids = new Set(rows.value.flatMap((a) => book.auxBindings[a.id] ?? []))
+  return book.auxTypes.filter((t) => ids.has(t.id))
+})
+const amountHeaders = computed(() => (showYtd ? ['期初余额', '本年累计借方', '本年累计贷方'] : ['期初余额']))
+async function exportOpening() {
+  if (dirty.value) await save()
+  const out: (string | number)[][] = []
+  const amounts = (v: Record<Field, number | string>) => fields.value.map((f) => toCents(v[f] as string) / 100)
+  for (const a of rows.value) {
+    const head = [a.code, a.full_name, a.direction === 'D' ? '借' : '贷']
+    const blank = auxColumns.value.map(() => '')
+    if (!a.is_leaf) {
+      // 上级科目：仅供对照，导入时忽略
+      const s = sums.value.get(a.id)
+      out.push([...head, ...blank, ...fields.value.map((f) => (s?.[f] ?? 0) / 100)])
+    } else if (hasAux(a)) {
+      const list = await http.get<OpeningAuxRow[]>(`${book.base}/opening/aux/${a.id}`)
+      const label = (r: OpeningAuxRow, typeId: number) => {
+        const x = r.aux.find((y) => y.type_id === typeId)
+        return x ? `${x.item_code} ${x.item_name}` : ''
+      }
+      if (!list.length) out.push([...head, ...blank, ...fields.value.map(() => 0)])
+      for (const r of list) out.push([...head, ...auxColumns.value.map((t) => label(r, t.id)), ...amounts(r)])
+    } else {
+      out.push([...head, ...blank, ...amounts(values.get(a.id) ?? { balance: '', ytd_debit: '', ytd_credit: '' })])
+    }
+  }
+  await writeSheet(
+    `${book.detail!.name}-期初余额${book.multiLedger ? '-' + ledgerName.value : ''}`,
+    ['科目编码', '科目名称', '方向', ...auxColumns.value.map((t) => t.name), ...amountHeaders.value],
+    out,
+    [
+      '只需填写末级科目；上级科目的行仅供对照，导入时忽略。',
+      '余额按科目方向填写，反方向余额填负数。损益（收支）类科目没有期初余额。',
+      '启用了辅助核算的科目：每个项目（组合）占一行，在对应的辅助核算列填项目编码（可带名称，如“001 甲公司”）。同一科目可以有多行。',
+      '文件中出现的科目以文件为准；未出现的科目保持不变。',
+      '导入时只要有一行有问题，整个文件都不会导入。',
+    ].join('\n'),
+  )
+}
+async function importOpening(sheet: SheetRow[]): Promise<ImportResult> {
+  const res = await http.post<ImportResult>(`${book.base}/import/openings`, {
+    ledger_id: ledgerId.value,
+    rows: sheet.map((r) => ({
+      row: r.row,
+      code: r.values['科目编码'] ?? '',
+      balance: r.values['期初余额'] ?? '',
+      ytd_debit: r.values['本年累计借方'] ?? '',
+      ytd_credit: r.values['本年累计贷方'] ?? '',
+      aux: Object.fromEntries(book.auxTypes.filter((t) => r.values[t.name]).map((t) => [t.name, r.values[t.name]])),
+    })),
+  })
+  if (res.applied) await load()
+  return res
+}
+
 // ---- 启用辅助核算的科目：按项目录入 ----
 interface AuxRow { aux: Record<number, number | undefined>; balance: string; ytd_debit: string; ytd_credit: string }
 const hasAux = (a: Account) => (book.auxBindings[a.id]?.length ?? 0) > 0
@@ -147,6 +210,8 @@ async function saveAux() {
         <el-tag v-else type="danger">试算不平衡：借方 {{ fmt(check.debit, '0.00') }} / 贷方 {{ fmt(check.credit, '0.00') }}</el-tag>
       </template>
       <span class="spacer" />
+      <el-button @click="exportOpening">导出 Excel</el-button>
+      <el-button v-if="!locked" @click="importVisible = true">导入</el-button>
       <el-button v-if="!locked" type="primary" :loading="saving" @click="save">保存</el-button>
     </div>
     <el-alert v-if="locked && book.can('opening:write')" type="info" :closable="false" show-icon style="margin-bottom: 10px"
@@ -186,6 +251,15 @@ async function saveAux() {
       只需在末级科目录入；余额按科目方向填写，反方向余额填负数。损益（收支）类科目没有期初余额{{ showYtd ? '，年中启用时在“本年累计”中录入实际发生额' : '' }}。
     </p>
   </div>
+
+  <ImportDialog
+    v-model="importVisible"
+    :title="`导入期初余额${book.multiLedger ? '（' + ledgerName + '）' : ''}`"
+    :required="['科目编码', '期初余额']"
+    :tips="['只导入末级科目；文件中出现的科目以文件为准，未出现的不变', '启用辅助核算的科目每个项目占一行，在对应列填项目编码', '任何一行有问题，整个文件都不会导入']"
+    :template="exportOpening"
+    :submit="importOpening"
+  />
 
   <el-dialog v-model="auxVisible" :title="`期初余额 — ${auxAccount?.code} ${auxAccount?.name}`" width="860px">
     <table v-if="auxAccount" class="sheet">
