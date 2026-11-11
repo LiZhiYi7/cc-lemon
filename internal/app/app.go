@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,7 +41,13 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 	if err != nil {
 		return nil, err
 	}
-	books, err := book.New(d, standards, configs.Roles)
+	roles := configs.Roles
+	if cfg.Auth.RolesFile != "" {
+		if roles, err = os.ReadFile(cfg.Auth.RolesFile); err != nil {
+			return nil, fmt.Errorf("读取角色配置: %w", err)
+		}
+	}
+	books, err := book.New(d, standards, roles)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,38 @@
+:root {
+  --el-color-primary: #2f6fed;
+  --lemon-bg: #f3f5f9;
+  --lemon-border: #dfe4ec;
+  --lemon-head: #f6f8fb;
+}
+html, body, #app { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px; color: #1f2733; background: var(--lemon-bg);
+}
+.page { padding: 16px 20px; }
+.card { background: #fff; border: 1px solid var(--lemon-border); border-radius: 6px; padding: 16px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.toolbar .spacer { flex: 1; }
+.page-title { font-size: 16px; font-weight: 600; margin: 0 12px 0 0; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.muted { color: #8a94a6; }
+.link { color: var(--el-color-primary); cursor: pointer; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+/* 账表通用表格 */
+table.sheet { width: 100%; border-collapse: collapse; background: #fff; }
+table.sheet th, table.sheet td { border: 1px solid var(--lemon-border); padding: 7px 10px; }
+table.sheet th { background: var(--lemon-head); font-weight: 600; text-align: center; white-space: nowrap; }
+table.sheet tr.bold td { font-weight: 600; }
+table.sheet tr.sub td { background: #fafbfd; }
+table.sheet tbody tr:hover td { background: #f3f7ff; }
+table.sheet td.center { text-align: center; }
+table.sheet tfoot td { font-weight: 600; background: var(--lemon-head); }
+.sheet-wrap { overflow: auto; max-width: 100%; }
+
+@media print {
+  .no-print, .el-aside, .el-header { display: none !important; }
+  .page { padding: 0; }
+  body { background: #fff; }
+  .card { border: none; padding: 0; }
+}

@@ -22,6 +22,7 @@ type Config struct {
 	Auth struct {
 		JWTSecret string        `yaml:"jwt_secret"` // 留空则首次启动自动生成并保存在数据库
 		TokenTTL  time.Duration `yaml:"token_ttl"`
+		RolesFile string        `yaml:"roles_file"` // 自定义角色权限文件，留空用内置 configs/roles.yaml
 	} `yaml:"auth"`
 	Standards struct {
 		Dir string `yaml:"dir"` // 额外的会计准则模板目录（覆盖/追加内置模板）
@@ -61,6 +62,7 @@ func Load() (*Config, error) {
 	str("LEMON_DATABASE_DSN", &c.Database.DSN)
 	str("LEMON_AUTH_JWT_SECRET", &c.Auth.JWTSecret)
 	str("LEMON_STANDARDS_DIR", &c.Standards.Dir)
+	str("LEMON_AUTH_ROLES_FILE", &c.Auth.RolesFile)
 	if v := os.Getenv("LEMON_DATABASE_MAX_CONNS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
