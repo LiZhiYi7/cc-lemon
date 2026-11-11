@@ -2,11 +2,12 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { http } from '@/api/http'
-import type { Opening, OpeningCheck } from '@/api/types'
+import type { Account, Opening, OpeningAuxRow, OpeningCheck } from '@/api/types'
 import { useBook } from '@/stores/book'
 import { fmt, fmtCents, fromCents, toCents } from '@/utils/money'
 import { periodStr } from '@/utils/period'
 import LedgerSwitch from '@/components/LedgerSwitch.vue'
+import AuxSelect from '@/components/AuxSelect.vue'
 
 type Field = 'balance' | 'ytd_debit' | 'ytd_credit'
 const book = useBook()
@@ -82,7 +83,7 @@ async function save() {
   saving.value = true
   try {
     const items = book.accounts
-      .filter((a) => a.is_leaf && values.has(a.id))
+      .filter((a) => a.is_leaf && values.has(a.id) && !hasAux(a))
       .map((a) => {
         const v = values.get(a.id)!
         return { account_id: a.id, balance: v.balance || '0', ytd_debit: v.ytd_debit || '0', ytd_credit: v.ytd_credit || '0' }
@@ -95,6 +96,44 @@ async function save() {
   }
 }
 const check = computed(() => checks.value.find((c) => c.ledger_id === ledgerId.value))
+
+// ---- 启用辅助核算的科目：按项目录入 ----
+interface AuxRow { aux: Record<number, number | undefined>; balance: string; ytd_debit: string; ytd_credit: string }
+const hasAux = (a: Account) => (book.auxBindings[a.id]?.length ?? 0) > 0
+const auxAccount = ref<Account | null>(null)
+const auxRows = ref<AuxRow[]>([])
+const auxVisible = ref(false)
+const newAuxRow = (): AuxRow => ({ aux: {}, balance: '', ytd_debit: '', ytd_credit: '' })
+const amount = (s: string) => (toCents(s) ? fromCents(toCents(s)) : '')
+
+async function openAux(a: Account) {
+  if (dirty.value) await save()
+  const list = await http.get<OpeningAuxRow[]>(`${book.base}/opening/aux/${a.id}`)
+  auxRows.value = list.map((r) => ({
+    aux: Object.fromEntries(r.aux.map((x) => [x.type_id, x.item_id])),
+    balance: amount(r.balance),
+    ytd_debit: amount(r.ytd_debit),
+    ytd_credit: amount(r.ytd_credit),
+  }))
+  if (!locked.value) auxRows.value.push(newAuxRow())
+  auxAccount.value = a
+  auxVisible.value = true
+}
+async function saveAux() {
+  const a = auxAccount.value!
+  const items = auxRows.value
+    .filter((r) => toCents(r.balance) || toCents(r.ytd_debit) || toCents(r.ytd_credit))
+    .map((r) => ({
+      aux: book.auxTypesOf(a.id).map((t) => ({ type_id: t.id, item_id: r.aux[t.id] ?? 0 })),
+      balance: r.balance || '0',
+      ytd_debit: r.ytd_debit || '0',
+      ytd_credit: r.ytd_credit || '0',
+    }))
+  await http.put(`${book.base}/opening/aux/${a.id}`, { items })
+  auxVisible.value = false
+  ElMessage.success('期初数据已保存')
+  load()
+}
 </script>
 
 <template>
@@ -130,8 +169,11 @@ const check = computed(() => checks.value.find((c) => c.ledger_id === ledgerId.v
           <td>{{ a.code }}</td>
           <td :style="{ paddingLeft: 10 + (a.level - 1) * 20 + 'px' }">{{ a.name }}</td>
           <td class="center">{{ a.direction === 'D' ? '借' : '贷' }}</td>
-          <td v-for="f in fields" :key="f" class="num" :class="{ edit: a.is_leaf && !locked }">
-            <template v-if="a.is_leaf && !locked && !(f === 'balance' && plCats.has(a.category))">
+          <td v-for="f in fields" :key="f" class="num" :class="{ edit: a.is_leaf && !locked && !hasAux(a) }">
+            <template v-if="hasAux(a)">
+              <a class="link" title="按辅助核算项目录入" @click="openAux(a)">{{ fmtCents(sums.get(a.id)?.[f] ?? 0, '按项目录入') }}</a>
+            </template>
+            <template v-else-if="a.is_leaf && !locked && !(f === 'balance' && plCats.has(a.category))">
               <el-input v-model="cell(a.id)[f]" class="amount" @input="dirty = true" @blur="normalize(a.id, f)" />
             </template>
             <template v-else-if="f === 'balance' && plCats.has(a.category)"><span class="muted">—</span></template>
@@ -144,6 +186,42 @@ const check = computed(() => checks.value.find((c) => c.ledger_id === ledgerId.v
       只需在末级科目录入；余额按科目方向填写，反方向余额填负数。损益（收支）类科目没有期初余额{{ showYtd ? '，年中启用时在“本年累计”中录入实际发生额' : '' }}。
     </p>
   </div>
+
+  <el-dialog v-model="auxVisible" :title="`期初余额 — ${auxAccount?.code} ${auxAccount?.name}`" width="860px">
+    <table v-if="auxAccount" class="sheet">
+      <thead>
+        <tr>
+          <th v-for="t in book.auxTypesOf(auxAccount.id)" :key="t.id">{{ t.name }}</th>
+          <th v-if="!plCats.has(auxAccount.category)" style="width: 150px">期初余额</th>
+          <template v-if="showYtd">
+            <th style="width: 150px">本年累计借方</th>
+            <th style="width: 150px">本年累计贷方</th>
+          </template>
+          <th v-if="!locked" style="width: 44px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(r, i) in auxRows" :key="i">
+          <td v-for="t in book.auxTypesOf(auxAccount.id)" :key="t.id" class="edit">
+            <AuxSelect v-model="r.aux[t.id]" :type-id="t.id" :disabled="locked" />
+          </td>
+          <td v-if="!plCats.has(auxAccount.category)" class="edit">
+            <el-input v-model="r.balance" class="amount" :disabled="locked" @blur="r.balance = amount(r.balance)" />
+          </td>
+          <template v-if="showYtd">
+            <td class="edit"><el-input v-model="r.ytd_debit" class="amount" :disabled="locked" @blur="r.ytd_debit = amount(r.ytd_debit)" /></td>
+            <td class="edit"><el-input v-model="r.ytd_credit" class="amount" :disabled="locked" @blur="r.ytd_credit = amount(r.ytd_credit)" /></td>
+          </template>
+          <td v-if="!locked" class="center"><el-button link type="danger" @click="auxRows.splice(i, 1)">✕</el-button></td>
+        </tr>
+      </tbody>
+    </table>
+    <el-button v-if="!locked" link type="primary" style="margin-top: 8px" @click="auxRows.push(newAuxRow())">+ 增加一行</el-button>
+    <template #footer>
+      <el-button @click="auxVisible = false">{{ locked ? '关闭' : '取消' }}</el-button>
+      <el-button v-if="!locked" type="primary" @click="saveAux">保存</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>

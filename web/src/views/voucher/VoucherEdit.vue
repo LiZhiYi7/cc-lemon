@@ -9,8 +9,9 @@ import { useBook } from '@/stores/book'
 import { fmtCents, fromCents, toCents, toChinese } from '@/utils/money'
 import { defaultDate, periodStr } from '@/utils/period'
 import AccountSelect from '@/components/AccountSelect.vue'
+import AuxSelect from '@/components/AuxSelect.vue'
 
-interface Row { summary: string; account_id?: number; debit: string; credit: string }
+interface Row { summary: string; account_id?: number; debit: string; credit: string; aux: Record<number, number | undefined> }
 interface Section { ledger: Ledger; rows: Row[] }
 
 const MIN_ROWS = 4
@@ -29,7 +30,15 @@ const head = reactive({
   date: defaultDate(detail.current_period),
   attachments: 0,
 })
-const emptyRow = (): Row => ({ summary: '', account_id: undefined, debit: '', credit: '' })
+const emptyRow = (): Row => ({ summary: '', account_id: undefined, debit: '', credit: '', aux: {} })
+const amount = (s: string) => (toCents(s) ? fromCents(toCents(s)) : '')
+const toRow = (l: VoucherLine): Row => ({
+  summary: l.summary,
+  account_id: l.account_id,
+  debit: amount(l.debit),
+  credit: amount(l.credit),
+  aux: Object.fromEntries((l.aux ?? []).map((a) => [a.type_id, a.item_id])),
+})
 const sections = reactive<Section[]>(
   book.ledgers.map((l) => ({ ledger: l, rows: Array.from({ length: l.is_primary ? MIN_ROWS : 2 }, emptyRow) })),
 )
@@ -45,14 +54,7 @@ function fill(v: Voucher) {
   loaded.value = v
   Object.assign(head, { word: v.word, number: v.number, numberTouched: false, date: v.date, attachments: v.attachments })
   for (const s of sections) {
-    const rows: Row[] = v.lines
-      .filter((l) => l.ledger_id === s.ledger.id)
-      .map((l) => ({
-        summary: l.summary,
-        account_id: l.account_id,
-        debit: toCents(l.debit) ? fromCents(toCents(l.debit)) : '',
-        credit: toCents(l.credit) ? fromCents(toCents(l.credit)) : '',
-      }))
+    const rows = v.lines.filter((l) => l.ledger_id === s.ledger.id).map(toRow)
     while (rows.length < 2) rows.push(emptyRow())
     s.rows = rows
   }
@@ -124,7 +126,13 @@ function collect() {
   for (const s of sections)
     for (const r of s.rows) {
       if (!r.account_id && !toCents(r.debit) && !toCents(r.credit)) continue
-      lines.push({ summary: r.summary, account_id: r.account_id ?? 0, debit: r.debit || '0', credit: r.credit || '0' })
+      lines.push({
+        summary: r.summary,
+        account_id: r.account_id ?? 0,
+        debit: r.debit || '0',
+        credit: r.credit || '0',
+        aux: book.auxTypesOf(r.account_id).map((t) => ({ type_id: t.id, item_id: r.aux[t.id] ?? 0 })),
+      })
     }
   return lines
 }
@@ -134,14 +142,7 @@ async function generateParallel() {
   const res = await http.post<{ lines: VoucherLine[]; warnings: string[] }>(`${book.base}/vouchers/parallel-suggest`, { lines: collect() })
   if (res.lines.length) {
     for (const s of sections) {
-      const rows: Row[] = res.lines
-        .filter((l) => l.ledger_id === s.ledger.id)
-        .map((l) => ({
-          summary: l.summary,
-          account_id: l.account_id,
-          debit: toCents(l.debit) ? fromCents(toCents(l.debit)) : '',
-          credit: toCents(l.credit) ? fromCents(toCents(l.credit)) : '',
-        }))
+      const rows = res.lines.filter((l) => l.ledger_id === s.ledger.id).map(toRow)
       if (!rows.length) continue
       while (rows.length < 2) rows.push(emptyRow())
       s.rows = rows
@@ -256,7 +257,12 @@ const print = () => window.print()
             <tr v-for="(r, i) in s.rows" :key="i">
               <td class="center muted">{{ i + 1 }}</td>
               <td><el-input v-model="r.summary" :disabled="readonly" @focus="focusSummary(s, i)" /></td>
-              <td><AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" /></td>
+              <td>
+                <AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" />
+                <div v-if="book.auxTypesOf(r.account_id).length" class="aux">
+                  <AuxSelect v-for="t in book.auxTypesOf(r.account_id)" :key="t.id" v-model="r.aux[t.id]" :type-id="t.id" :placeholder="'选择' + t.name" :disabled="readonly" size="small" />
+                </div>
+              </td>
               <td>
                 <el-input v-model="r.debit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'debit')" @blur="normalize(r, 'debit')" @keydown="(e: any) => autoBalance(e, s, r, 'debit')" />
               </td>
@@ -272,7 +278,7 @@ const print = () => window.print()
             <tr>
               <td colspan="3">
                 合计：{{ toChinese(totals[si].debit) }}
-                <el-tag v-if="totals[si].debit !== totals[si].credit" type="danger" size="small" style="margin-left: 8px">
+                <el-tag v-if="totals[si].debit !== totals[si].credit" type="danger" size="small" disable-transitions style="margin-left: 8px">
                   借贷差额 {{ fmtCents(totals[si].debit - totals[si].credit) }}
                 </el-tag>
               </td>
@@ -302,6 +308,9 @@ const print = () => window.print()
 .section-title { font-weight: 600; margin-bottom: 6px; padding-left: 8px; border-left: 3px solid var(--el-color-primary); }
 .entry td { padding: 2px; }
 .entry tfoot td { padding: 8px 10px; }
+.aux { display: flex; gap: 4px; padding: 0 4px 4px; }
+.aux :deep(.el-select__wrapper) { background: #f6f8fb !important; }
+.aux :deep(.el-select__placeholder.is-transparent) { color: #e6a23c; }
 .entry :deep(.el-input__wrapper), .entry :deep(.el-select__wrapper) { box-shadow: none !important; background: transparent; }
 .entry :deep(.el-input__wrapper.is-focus), .entry :deep(.el-select__wrapper.is-focused) { box-shadow: 0 0 0 1px var(--el-color-primary) inset !important; }
 .entry :deep(.amount input) { text-align: right; font-variant-numeric: tabular-nums; }

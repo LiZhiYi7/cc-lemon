@@ -109,6 +109,7 @@ const open = (v: Voucher) => router.push(`/b/${detail.id}/vouchers/${v.id}`)
             <td>
               <el-tag v-if="ledgerName(l.ledger_id) && !ledgerName(l.ledger_id)!.is_primary" size="small" type="warning" style="margin-right: 6px">{{ ledgerName(l.ledger_id)!.name }}</el-tag>
               {{ l.account_code }} {{ l.account_name }}
+              <span v-if="l.aux?.length" class="muted">· {{ l.aux.map((a) => a.item_name).join(' / ') }}</span>
             </td>
             <td class="num">{{ fmt(l.debit) }}</td>
             <td class="num">{{ fmt(l.credit) }}</td>

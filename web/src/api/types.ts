@@ -29,9 +29,18 @@ export interface Account {
 export interface Opening { account_id: number; balance: string; ytd_debit: string; ytd_credit: string }
 export interface OpeningCheck { ledger_id: number; debit: string; credit: string; balanced: boolean }
 
+export interface AuxType { id: number; code: string; name: string; is_system: boolean }
+export interface AuxItem { id: number; type_id: number; code: string; name: string; enabled: boolean; remark: string }
+export interface AuxRef { type_id: number; item_id: number; item_code?: string; item_name?: string }
+export interface OpeningAuxRow { aux: AuxRef[]; balance: string; ytd_debit: string; ytd_credit: string }
+export interface AuxBalanceRow {
+  item_id: number; item_code: string; item_name: string; account_id: number; account_code: string; account_name: string
+  open_debit: string; open_credit: string; debit: string; credit: string; end_debit: string; end_credit: string
+}
+
 export interface VoucherLine {
   id?: number; ledger_id: number; summary: string; account_id: number
-  account_code?: string; account_name?: string; debit: string; credit: string
+  account_code?: string; account_name?: string; debit: string; credit: string; aux?: AuxRef[]
 }
 export interface Voucher {
   id: number; year: number; month: number; word: string; number: number; date: string; attachments: number
@@ -50,7 +59,7 @@ export interface TrialRow {
 }
 export interface DetailRow {
   kind: 'open' | 'line' | 'month' | 'year'; date?: string; voucher_id?: number; voucher_no?: string
-  account?: string; summary: string; debit: string; credit: string; dir: string; balance: string
+  account?: string; aux?: string; summary: string; debit: string; credit: string; dir: string; balance: string
 }
 export interface GeneralAccount {
   account_id: number; code: string; name: string

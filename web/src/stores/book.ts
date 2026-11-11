@@ -1,10 +1,16 @@
 import { defineStore } from 'pinia'
 import { http } from '@/api/http'
-import type { Account, BookDetail, Ledger } from '@/api/types'
+import type { Account, AuxItem, AuxType, BookDetail, Ledger } from '@/api/types'
 
 /** 当前账套上下文：基础资料只取一次，各页面共享。 */
 export const useBook = defineStore('book', {
-  state: () => ({ detail: null as BookDetail | null, accounts: [] as Account[] }),
+  state: () => ({
+    detail: null as BookDetail | null,
+    accounts: [] as Account[],
+    auxTypes: [] as AuxType[],
+    auxItems: [] as AuxItem[],
+    auxBindings: {} as Record<number, number[]>, // 科目 ID → 启用的辅助核算类别
+  }),
   getters: {
     base: (s) => `/books/${s.detail?.id}`,
     ledgers: (s): Ledger[] => s.detail?.ledgers ?? [],
@@ -32,6 +38,22 @@ export const useBook = defineStore('book', {
       ])
       this.detail = detail
       this.accounts = accounts
+      await this.reloadAux()
+    },
+    async reloadAux() {
+      ;[this.auxTypes, this.auxItems, this.auxBindings] = await Promise.all([
+        http.get<AuxType[]>(`${this.base}/aux/types`),
+        http.get<AuxItem[]>(`${this.base}/aux/items`),
+        http.get<Record<number, number[]>>(`${this.base}/aux/bindings`),
+      ])
+    },
+    /** 科目启用的辅助核算类别。 */
+    auxTypesOf(accountId?: number): AuxType[] {
+      const ids = (accountId && this.auxBindings[accountId]) || []
+      return ids.map((id) => this.auxTypes.find((t) => t.id === id)!).filter(Boolean)
+    },
+    auxItemsOf(typeId: number) {
+      return this.auxItems.filter((i) => i.type_id === typeId)
     },
     async reloadAccounts() {
       this.accounts = await http.get<Account[]>(`${this.base}/accounts`)

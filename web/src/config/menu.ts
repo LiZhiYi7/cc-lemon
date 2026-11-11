@@ -31,6 +31,8 @@ export const menu: MenuGroup[] = [
       { title: '科目余额表', path: 'ledger/trial' },
       { title: '明细账', path: 'ledger/detail' },
       { title: '总账', path: 'ledger/general' },
+      { title: '辅助核算余额表', path: 'ledger/aux-balance' },
+      { title: '辅助核算明细账', path: 'ledger/aux-detail' },
     ],
   },
   { title: '报表', icon: DataAnalysis, items: [], dynamic: 'reports' },
@@ -40,6 +42,7 @@ export const menu: MenuGroup[] = [
     icon: Setting,
     items: [
       { title: '会计科目', path: 'settings/accounts' },
+      { title: '辅助核算', path: 'settings/aux' },
       { title: '期初余额', path: 'settings/opening' },
       { title: '平行记账规则', path: 'settings/parallel', multiLedgerOnly: true },
       { title: '账套设置', path: 'settings/book', perm: 'book:admin' },

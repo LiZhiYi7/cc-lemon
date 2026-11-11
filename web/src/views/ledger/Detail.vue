@@ -65,6 +65,7 @@ const print = () => window.print()
             <td>
               {{ r.summary }}
               <span v-if="r.account" class="muted">（{{ r.account }}）</span>
+              <span v-if="r.aux" class="muted">· {{ r.aux }}</span>
             </td>
             <td class="num">{{ fmt(r.debit) }}</td>
             <td class="num">{{ fmt(r.credit) }}</td>
