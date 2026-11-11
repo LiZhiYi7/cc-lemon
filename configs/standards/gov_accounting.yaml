@@ -1,0 +1,373 @@
+# 政府会计制度（行政事业单位）—— 平行记账
+# 同一账套内两套核算账簿：财务会计（权责发生制）与预算会计（收付实现制）。
+# 一张凭证可同时包含两个账簿的分录，各自借贷平衡。
+code: gov_accounting
+name: 政府会计制度（行政事业单位）
+description: 财务会计与预算会计平行记账，适用于行政事业单位。
+account_code_scheme: [4, 2, 2, 2]
+
+voucher_words:
+  - {word: 记, title: 记账凭证, default: true}
+
+ledgers:
+  - {code: FIN, name: 财务会计, primary: true}
+  - {code: BUD, name: 预算会计}
+
+categories:
+  - ledger: FIN
+    code: fin_asset
+    name: 资产
+    accounts:
+      - {code: 1001, name: 库存现金, dir: D, cash: true}
+      - {code: 1002, name: 银行存款, dir: D, cash: true}
+      - {code: 1011, name: 零余额账户用款额度, dir: D, cash: true}
+      - {code: 1021, name: 其他货币资金, dir: D, cash: true}
+      - {code: 1101, name: 短期投资, dir: D}
+      - {code: 1201, name: 财政应返还额度, dir: D, cash: true}
+      - {code: 1211, name: 应收票据, dir: D}
+      - {code: 1212, name: 应收账款, dir: D}
+      - {code: 1214, name: 预付账款, dir: D}
+      - {code: 1215, name: 应收股利, dir: D}
+      - {code: 1216, name: 应收利息, dir: D}
+      - {code: 1218, name: 其他应收款, dir: D}
+      - {code: 1219, name: 坏账准备, dir: C}
+      - {code: 1301, name: 在途物品, dir: D}
+      - {code: 1302, name: 库存物品, dir: D}
+      - {code: 1303, name: 加工物品, dir: D}
+      - {code: 1401, name: 待摊费用, dir: D}
+      - {code: 1501, name: 长期股权投资, dir: D}
+      - {code: 1502, name: 长期债券投资, dir: D}
+      - {code: 1601, name: 固定资产, dir: D}
+      - {code: 1602, name: 固定资产累计折旧, dir: C}
+      - {code: 1611, name: 工程物资, dir: D}
+      - {code: 1613, name: 在建工程, dir: D}
+      - {code: 1701, name: 无形资产, dir: D}
+      - {code: 1702, name: 无形资产累计摊销, dir: C}
+      - {code: 1703, name: 研发支出, dir: D}
+      - {code: 1801, name: 公共基础设施, dir: D}
+      - {code: 1802, name: 公共基础设施累计折旧（摊销）, dir: C}
+      - {code: 1811, name: 政府储备物资, dir: D}
+      - {code: 1821, name: 文物文化资产, dir: D}
+      - {code: 1831, name: 保障性住房, dir: D}
+      - {code: 1832, name: 保障性住房累计折旧, dir: C}
+      - {code: 1891, name: 受托代理资产, dir: D}
+      - {code: 1901, name: 长期待摊费用, dir: D}
+      - {code: 1902, name: 待处理财产损溢, dir: D}
+  - ledger: FIN
+    code: fin_liability
+    name: 负债
+    accounts:
+      - {code: 2001, name: 短期借款, dir: C}
+      - {code: 2101, name: 应交增值税, dir: C}
+      - {code: 2102, name: 其他应交税费, dir: C}
+      - {code: 2103, name: 应缴财政款, dir: C}
+      - {code: 2201, name: 应付职工薪酬, dir: C}
+      - {code: 2301, name: 应付票据, dir: C}
+      - {code: 2302, name: 应付账款, dir: C}
+      - {code: 2303, name: 应付政府补贴款, dir: C}
+      - {code: 2304, name: 应付利息, dir: C}
+      - {code: 2305, name: 预收账款, dir: C}
+      - {code: 2307, name: 其他应付款, dir: C}
+      - {code: 2401, name: 预提费用, dir: C}
+      - {code: 2501, name: 长期借款, dir: C}
+      - {code: 2502, name: 长期应付款, dir: C}
+      - {code: 2601, name: 预计负债, dir: C}
+      - {code: 2901, name: 受托代理负债, dir: C}
+  - ledger: FIN
+    code: fin_net_asset
+    name: 净资产
+    accounts:
+      - {code: 3001, name: 累计盈余, dir: C}
+      - {code: 3101, name: 专用基金, dir: C}
+      - {code: 3201, name: 权益法调整, dir: C}
+      - {code: 3301, name: 本期盈余, dir: C}
+      - {code: 3302, name: 本年盈余分配, dir: C}
+      - {code: 3401, name: 无偿调拨净资产, dir: C}
+      - {code: 3501, name: 以前年度盈余调整, dir: C}
+  - ledger: FIN
+    code: fin_revenue
+    name: 收入
+    pl: true
+    accounts:
+      - {code: 4001, name: 财政拨款收入, dir: C}
+      - {code: 4101, name: 事业收入, dir: C}
+      - {code: 4201, name: 上级补助收入, dir: C}
+      - {code: 4301, name: 附属单位上缴收入, dir: C}
+      - {code: 4401, name: 经营收入, dir: C}
+      - {code: 4601, name: 非同级财政拨款收入, dir: C}
+      - {code: 4602, name: 投资收益, dir: C}
+      - {code: 4603, name: 捐赠收入, dir: C}
+      - {code: 4604, name: 利息收入, dir: C}
+      - {code: 4605, name: 租金收入, dir: C}
+      - {code: 4609, name: 其他收入, dir: C}
+  - ledger: FIN
+    code: fin_expense
+    name: 费用
+    pl: true
+    accounts:
+      - {code: 5001, name: 业务活动费用, dir: D}
+      - {code: 5101, name: 单位管理费用, dir: D}
+      - {code: 5201, name: 经营费用, dir: D}
+      - {code: 5301, name: 资产处置费用, dir: D}
+      - {code: 5401, name: 上缴上级费用, dir: D}
+      - {code: 5501, name: 对附属单位补助费用, dir: D}
+      - {code: 5801, name: 所得税费用, dir: D}
+      - {code: 5901, name: 其他费用, dir: D}
+  - ledger: BUD
+    code: bud_revenue
+    name: 预算收入
+    pl: true
+    accounts:
+      - {code: 6001, name: 财政拨款预算收入, dir: C}
+      - {code: 6101, name: 事业预算收入, dir: C}
+      - {code: 6201, name: 上级补助预算收入, dir: C}
+      - {code: 6301, name: 附属单位上缴预算收入, dir: C}
+      - {code: 6401, name: 经营预算收入, dir: C}
+      - {code: 6501, name: 债务预算收入, dir: C}
+      - {code: 6601, name: 非同级财政拨款预算收入, dir: C}
+      - {code: 6602, name: 投资预算收益, dir: C}
+      - {code: 6609, name: 其他预算收入, dir: C}
+  - ledger: BUD
+    code: bud_expense
+    name: 预算支出
+    pl: true
+    accounts:
+      - {code: 7101, name: 行政支出, dir: D}
+      - {code: 7201, name: 事业支出, dir: D}
+      - {code: 7301, name: 经营支出, dir: D}
+      - {code: 7401, name: 上缴上级支出, dir: D}
+      - {code: 7501, name: 对附属单位补助支出, dir: D}
+      - {code: 7601, name: 投资支出, dir: D}
+      - {code: 7701, name: 债务还本支出, dir: D}
+      - {code: 7901, name: 其他支出, dir: D}
+  - ledger: BUD
+    code: bud_balance
+    name: 预算结余
+    accounts:
+      - {code: 8001, name: 资金结存, dir: D}
+      - {code: 800101, name: 零余额账户用款额度, dir: D}
+      - {code: 800102, name: 货币资金, dir: D}
+      - {code: 800103, name: 财政应返还额度, dir: D}
+      - {code: 8101, name: 财政拨款结转, dir: C}
+      - {code: 8102, name: 财政拨款结余, dir: C}
+      - {code: 8201, name: 非财政拨款结转, dir: C}
+      - {code: 8202, name: 非财政拨款结余, dir: C}
+      - {code: 8301, name: 专用结余, dir: C}
+      - {code: 8401, name: 经营结余, dir: C}
+      - {code: 8501, name: 其他结余, dir: C}
+      - {code: 8701, name: 非财政拨款结余分配, dir: C}
+
+# 平行记账规则：财务会计分录涉及“现金类”科目（cash: true）时，
+# 按下表把每条财务会计分录映射为同方向、同金额的预算会计分录。
+# side 限定只在借方(D)或贷方(C)发生时适用；未写表示借贷均适用。
+# 匹配时先找科目本身，再逐级找上级科目。建账后可在“平行记账规则”中按单位情况调整
+# （例如行政单位把 5001 → 7101 行政支出）。
+parallel:
+  - source: FIN
+    target: BUD
+    rules:
+      - {from: 1001, to: 800102}
+      - {from: 1002, to: 800102}
+      - {from: 1021, to: 800102}
+      - {from: 1011, to: 800101}
+      - {from: 1201, to: 800103}
+      - {from: 4001, to: 6001}
+      - {from: 4101, to: 6101}
+      - {from: 4201, to: 6201}
+      - {from: 4301, to: 6301}
+      - {from: 4401, to: 6401}
+      - {from: 4601, to: 6601}
+      - {from: 4602, to: 6602}
+      - {from: 4603, to: 6609}
+      - {from: 4604, to: 6609}
+      - {from: 4605, to: 6609}
+      - {from: 4609, to: 6609}
+      - {from: 5001, to: 7201, note: 行政单位请改为 7101 行政支出}
+      - {from: 5101, to: 7201}
+      - {from: 5201, to: 7301}
+      - {from: 5401, to: 7401}
+      - {from: 5501, to: 7501}
+      - {from: 5901, to: 7901}
+      - {from: 2001, side: C, to: 6501, note: 借入款项}
+      - {from: 2001, side: D, to: 7701, note: 归还本金}
+      - {from: 2501, side: C, to: 6501, note: 借入款项}
+      - {from: 2501, side: D, to: 7701, note: 归还本金}
+      - {from: 1501, side: D, to: 7601, note: 对外投资}
+      - {from: 1502, side: D, to: 7601, note: 对外投资}
+      - {from: 1214, side: D, to: 7201, note: 预付款项}
+      - {from: 1302, side: D, to: 7201, note: 购入库存物品}
+      - {from: 1601, side: D, to: 7201, note: 购置固定资产}
+      - {from: 1613, side: D, to: 7201, note: 支付工程款}
+      - {from: 1701, side: D, to: 7201, note: 购置无形资产}
+      - {from: 2201, side: D, to: 7201, note: 发放职工薪酬}
+      - {from: 2302, side: D, to: 7201, note: 支付应付账款}
+      - {from: 1212, side: C, to: 6101, note: 收回应收账款}
+      - {from: 2305, side: C, to: 6101, note: 预收款项}
+
+closing_rules:
+  - code: fin_surplus
+    name: 结转本期盈余
+    ledger: FIN
+    frequency: monthly
+    source_categories: [fin_revenue, fin_expense]
+    target: 3301
+    summary: 结转本期收入费用
+    exclude_from_activity: true
+    required: true
+  - code: fin_year_distribution
+    name: 结转本年盈余分配
+    ledger: FIN
+    frequency: yearly
+    source_accounts: [3301]
+    target: 3302
+    summary: 本期盈余转入本年盈余分配
+  - code: fin_year_accumulate
+    name: 结转累计盈余
+    ledger: FIN
+    frequency: yearly
+    source_accounts: [3302, 3401, 3501]
+    target: 3001
+    summary: 年末转入累计盈余
+
+reports:
+  - code: balance_sheet
+    name: 资产负债表
+    ledger: FIN
+    layout: two_side
+    columns:
+      - {key: end, name: 期末余额, at: period_end}
+      - {key: begin, name: 年初余额, at: year_begin}
+    rows:
+      - {name: 流动资产：, side: left, bold: true}
+      - {key: 1, name: 货币资金, side: left, nat: D, indent: 1, terms: [1001, 1002, 1011, 1021]}
+      - {key: 2, name: 短期投资, side: left, nat: D, indent: 1, terms: [1101]}
+      - {key: 3, name: 财政应返还额度, side: left, nat: D, indent: 1, terms: [1201]}
+      - {key: 4, name: 应收票据, side: left, nat: D, indent: 1, terms: [1211]}
+      - {key: 5, name: 应收账款净额, side: left, nat: D, indent: 1, terms: [1212, 1219]}
+      - {key: 6, name: 预付账款, side: left, nat: D, indent: 1, terms: [1214]}
+      - {key: 7, name: 应收股利, side: left, nat: D, indent: 1, terms: [1215]}
+      - {key: 8, name: 应收利息, side: left, nat: D, indent: 1, terms: [1216]}
+      - {key: 9, name: 其他应收款净额, side: left, nat: D, indent: 1, terms: [1218]}
+      - {key: 10, name: 存货, side: left, nat: D, indent: 1, terms: [1301, 1302, 1303]}
+      - {key: 11, name: 待摊费用, side: left, nat: D, indent: 1, terms: [1401]}
+      - {key: 13, name: 其他流动资产, side: left, nat: D, indent: 1}
+      - {key: 14, name: 流动资产合计, side: left, bold: true, sum: "1+2+3+4+5+6+7+8+9+10+11+13"}
+      - {name: 非流动资产：, side: left, bold: true}
+      - {key: 15, name: 长期股权投资, side: left, nat: D, indent: 1, terms: [1501]}
+      - {key: 16, name: 长期债券投资, side: left, nat: D, indent: 1, terms: [1502]}
+      - {key: 17, name: 固定资产原值, side: left, nat: D, indent: 1, terms: [1601]}
+      - {key: 18, name: 减：固定资产累计折旧, side: left, nat: C, indent: 1, terms: [1602]}
+      - {key: 19, name: 固定资产净值, side: left, indent: 1, sum: "17-18"}
+      - {key: 20, name: 工程物资, side: left, nat: D, indent: 1, terms: [1611]}
+      - {key: 21, name: 在建工程, side: left, nat: D, indent: 1, terms: [1613]}
+      - {key: 22, name: 无形资产原值, side: left, nat: D, indent: 1, terms: [1701]}
+      - {key: 23, name: 减：无形资产累计摊销, side: left, nat: C, indent: 1, terms: [1702]}
+      - {key: 24, name: 无形资产净值, side: left, indent: 1, sum: "22-23"}
+      - {key: 25, name: 研发支出, side: left, nat: D, indent: 1, terms: [1703]}
+      - {key: 26, name: 公共基础设施原值, side: left, nat: D, indent: 1, terms: [1801]}
+      - {key: 27, name: 减：公共基础设施累计折旧（摊销）, side: left, nat: C, indent: 1, terms: [1802]}
+      - {key: 28, name: 公共基础设施净值, side: left, indent: 1, sum: "26-27"}
+      - {key: 29, name: 政府储备物资, side: left, nat: D, indent: 1, terms: [1811]}
+      - {key: 30, name: 文物文化资产, side: left, nat: D, indent: 1, terms: [1821]}
+      - {key: 31, name: 保障性住房原值, side: left, nat: D, indent: 1, terms: [1831]}
+      - {key: 32, name: 减：保障性住房累计折旧, side: left, nat: C, indent: 1, terms: [1832]}
+      - {key: 33, name: 保障性住房净值, side: left, indent: 1, sum: "31-32"}
+      - {key: 34, name: 长期待摊费用, side: left, nat: D, indent: 1, terms: [1901]}
+      - {key: 35, name: 待处理财产损溢, side: left, nat: D, indent: 1, terms: [1902]}
+      - {key: 36, name: 其他非流动资产, side: left, nat: D, indent: 1}
+      - {key: 37, name: 非流动资产合计, side: left, bold: true, sum: "15+16+19+20+21+24+25+28+29+30+33+34+35+36"}
+      - {key: 38, name: 受托代理资产, side: left, nat: D, terms: [1891]}
+      - {key: 39, name: 资产总计, side: left, bold: true, sum: "14+37+38"}
+      - {name: 流动负债：, side: right, bold: true}
+      - {key: 40, name: 短期借款, side: right, nat: C, indent: 1, terms: [2001]}
+      - {key: 41, name: 应交增值税, side: right, nat: C, indent: 1, terms: [2101]}
+      - {key: 42, name: 其他应交税费, side: right, nat: C, indent: 1, terms: [2102]}
+      - {key: 43, name: 应缴财政款, side: right, nat: C, indent: 1, terms: [2103]}
+      - {key: 44, name: 应付职工薪酬, side: right, nat: C, indent: 1, terms: [2201]}
+      - {key: 45, name: 应付票据, side: right, nat: C, indent: 1, terms: [2301]}
+      - {key: 46, name: 应付账款, side: right, nat: C, indent: 1, terms: [2302]}
+      - {key: 47, name: 应付政府补贴款, side: right, nat: C, indent: 1, terms: [2303]}
+      - {key: 48, name: 应付利息, side: right, nat: C, indent: 1, terms: [2304]}
+      - {key: 49, name: 预收账款, side: right, nat: C, indent: 1, terms: [2305]}
+      - {key: 50, name: 其他应付款, side: right, nat: C, indent: 1, terms: [2307]}
+      - {key: 51, name: 预提费用, side: right, nat: C, indent: 1, terms: [2401]}
+      - {key: 52, name: 其他流动负债, side: right, nat: C, indent: 1}
+      - {key: 53, name: 流动负债合计, side: right, bold: true, sum: "40+41+42+43+44+45+46+47+48+49+50+51+52"}
+      - {name: 非流动负债：, side: right, bold: true}
+      - {key: 54, name: 长期借款, side: right, nat: C, indent: 1, terms: [2501]}
+      - {key: 55, name: 长期应付款, side: right, nat: C, indent: 1, terms: [2502]}
+      - {key: 56, name: 预计负债, side: right, nat: C, indent: 1, terms: [2601]}
+      - {key: 57, name: 其他非流动负债, side: right, nat: C, indent: 1}
+      - {key: 58, name: 非流动负债合计, side: right, bold: true, sum: "54+55+56+57"}
+      - {key: 59, name: 受托代理负债, side: right, nat: C, terms: [2901]}
+      - {key: 60, name: 负债合计, side: right, bold: true, sum: "53+58+59"}
+      - {name: 净资产：, side: right, bold: true}
+      - {key: 61, name: 累计盈余, side: right, nat: C, indent: 1, terms: [3001]}
+      - {key: 62, name: 专用基金, side: right, nat: C, indent: 1, terms: [3101]}
+      - {key: 63, name: 权益法调整, side: right, nat: C, indent: 1, terms: [3201]}
+      - {key: 64, name: 无偿调拨净资产, side: right, nat: C, indent: 1, terms: [3401]}
+      - {key: 65, name: 本期盈余, side: right, nat: C, indent: 1, terms: [3301, 3302, 3501]}
+      - {key: 66, name: 净资产合计, side: right, bold: true, sum: "61+62+63+64+65"}
+      - {key: 67, name: 负债和净资产总计, side: right, bold: true, sum: "60+66"}
+    checks:
+      - {name: 资产总计 = 负债和净资产总计, left: 39, right: 67}
+
+  - code: revenue_expense
+    name: 收入费用表
+    ledger: FIN
+    layout: list
+    columns:
+      - {key: month, name: 本月数, range: period}
+      - {key: ytd, name: 本年累计数, range: ytd}
+    rows:
+      - {key: 1, name: 一、本期收入, bold: true, sum: "2+3+4+5+6+7+8+9+10+11+12"}
+      - {key: 2, name: 财政拨款收入, indent: 1, terms: [4001]}
+      - {key: 3, name: 事业收入, indent: 1, terms: [4101]}
+      - {key: 4, name: 上级补助收入, indent: 1, terms: [4201]}
+      - {key: 5, name: 附属单位上缴收入, indent: 1, terms: [4301]}
+      - {key: 6, name: 经营收入, indent: 1, terms: [4401]}
+      - {key: 7, name: 非同级财政拨款收入, indent: 1, terms: [4601]}
+      - {key: 8, name: 投资收益, indent: 1, terms: [4602]}
+      - {key: 9, name: 捐赠收入, indent: 1, terms: [4603]}
+      - {key: 10, name: 利息收入, indent: 1, terms: [4604]}
+      - {key: 11, name: 租金收入, indent: 1, terms: [4605]}
+      - {key: 12, name: 其他收入, indent: 1, terms: [4609]}
+      - {key: 13, name: 二、本期费用, bold: true, sum: "14+15+16+17+18+19+20+21"}
+      - {key: 14, name: 业务活动费用, indent: 1, terms: [5001]}
+      - {key: 15, name: 单位管理费用, indent: 1, terms: [5101]}
+      - {key: 16, name: 经营费用, indent: 1, terms: [5201]}
+      - {key: 17, name: 资产处置费用, indent: 1, terms: [5301]}
+      - {key: 18, name: 上缴上级费用, indent: 1, terms: [5401]}
+      - {key: 19, name: 对附属单位补助费用, indent: 1, terms: [5501]}
+      - {key: 20, name: 所得税费用, indent: 1, terms: [5801]}
+      - {key: 21, name: 其他费用, indent: 1, terms: [5901]}
+      - {key: 22, name: 三、本期盈余, bold: true, sum: "1-13"}
+
+  - code: budget_revenue_expense
+    name: 预算收入支出表
+    ledger: BUD
+    layout: list
+    columns:
+      - {key: month, name: 本月数, range: period}
+      - {key: ytd, name: 本年累计数, range: ytd}
+    rows:
+      - {key: 1, name: 一、本年预算收入, bold: true, sum: "2+3+4+5+6+7+8+9+10"}
+      - {key: 2, name: 财政拨款预算收入, indent: 1, terms: [6001]}
+      - {key: 3, name: 事业预算收入, indent: 1, terms: [6101]}
+      - {key: 4, name: 上级补助预算收入, indent: 1, terms: [6201]}
+      - {key: 5, name: 附属单位上缴预算收入, indent: 1, terms: [6301]}
+      - {key: 6, name: 经营预算收入, indent: 1, terms: [6401]}
+      - {key: 7, name: 债务预算收入, indent: 1, terms: [6501]}
+      - {key: 8, name: 非同级财政拨款预算收入, indent: 1, terms: [6601]}
+      - {key: 9, name: 投资预算收益, indent: 1, terms: [6602]}
+      - {key: 10, name: 其他预算收入, indent: 1, terms: [6609]}
+      - {key: 11, name: 二、本年预算支出, bold: true, sum: "12+13+14+15+16+17+18+19"}
+      - {key: 12, name: 行政支出, indent: 1, terms: [7101]}
+      - {key: 13, name: 事业支出, indent: 1, terms: [7201]}
+      - {key: 14, name: 经营支出, indent: 1, terms: [7301]}
+      - {key: 15, name: 上缴上级支出, indent: 1, terms: [7401]}
+      - {key: 16, name: 对附属单位补助支出, indent: 1, terms: [7501]}
+      - {key: 17, name: 投资支出, indent: 1, terms: [7601]}
+      - {key: 18, name: 债务还本支出, indent: 1, terms: [7701]}
+      - {key: 19, name: 其他支出, indent: 1, terms: [7901]}
+      - {key: 20, name: 三、本年预算收支差额, bold: true, sum: "1-11"}

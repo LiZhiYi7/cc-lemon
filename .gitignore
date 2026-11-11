@@ -1,0 +1,7 @@
+/bin/
+/config.yaml
+/deploy/.env
+node_modules/
+/web/dist/
+*.log
+.DS_Store

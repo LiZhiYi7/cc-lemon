@@ -1,0 +1,15 @@
+# 账套内角色 → 权限。权限点由各模块在路由上声明；"*" 表示全部。
+# 修改后重启生效；新增角色无需改代码。
+roles:
+  - code: owner
+    name: 账套管理员
+    permissions: ["*"]
+  - code: accountant
+    name: 会计
+    permissions: [account:write, opening:write, voucher:write, closing:run, period:close, parallel:write]
+  - code: reviewer
+    name: 审核
+    permissions: [voucher:review]
+  - code: viewer
+    name: 查看
+    permissions: []

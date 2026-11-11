@@ -1,0 +1,225 @@
+# 小企业会计准则（2013）
+# 新增/调整准则模板只需编辑本目录下的 YAML；已建账套不受影响（建账时已复制）。
+code: small_enterprise
+name: 小企业会计准则
+description: 适用于小型企业，单一核算账簿。
+account_code_scheme: [4, 2, 2, 2]
+
+voucher_words:
+  - {word: 记, title: 记账凭证, default: true}
+  - {word: 收, title: 收款凭证}
+  - {word: 付, title: 付款凭证}
+  - {word: 转, title: 转账凭证}
+
+ledgers:
+  - {code: MAIN, name: 财务会计, primary: true}
+
+categories:
+  - ledger: MAIN
+    code: asset
+    name: 资产
+    accounts:
+      - {code: 1001, name: 库存现金, dir: D, cash: true}
+      - {code: 1002, name: 银行存款, dir: D, cash: true}
+      - {code: 1012, name: 其他货币资金, dir: D, cash: true}
+      - {code: 1101, name: 短期投资, dir: D}
+      - {code: 1121, name: 应收票据, dir: D}
+      - {code: 1122, name: 应收账款, dir: D}
+      - {code: 1123, name: 预付账款, dir: D}
+      - {code: 1131, name: 应收股利, dir: D}
+      - {code: 1132, name: 应收利息, dir: D}
+      - {code: 1221, name: 其他应收款, dir: D}
+      - {code: 1401, name: 材料采购, dir: D}
+      - {code: 1402, name: 在途物资, dir: D}
+      - {code: 1403, name: 原材料, dir: D}
+      - {code: 1404, name: 材料成本差异, dir: D}
+      - {code: 1405, name: 库存商品, dir: D}
+      - {code: 1407, name: 商品进销差价, dir: C}
+      - {code: 1408, name: 委托加工物资, dir: D}
+      - {code: 1411, name: 周转材料, dir: D}
+      - {code: 1421, name: 消耗性生物资产, dir: D}
+      - {code: 1501, name: 长期债券投资, dir: D}
+      - {code: 1511, name: 长期股权投资, dir: D}
+      - {code: 1601, name: 固定资产, dir: D}
+      - {code: 1602, name: 累计折旧, dir: C}
+      - {code: 1604, name: 在建工程, dir: D}
+      - {code: 1605, name: 工程物资, dir: D}
+      - {code: 1606, name: 固定资产清理, dir: D}
+      - {code: 1621, name: 生产性生物资产, dir: D}
+      - {code: 1622, name: 生产性生物资产累计折旧, dir: C}
+      - {code: 1701, name: 无形资产, dir: D}
+      - {code: 1702, name: 累计摊销, dir: C}
+      - {code: 1801, name: 长期待摊费用, dir: D}
+      - {code: 1901, name: 待处理财产损溢, dir: D}
+  - ledger: MAIN
+    code: liability
+    name: 负债
+    accounts:
+      - {code: 2001, name: 短期借款, dir: C}
+      - {code: 2201, name: 应付票据, dir: C}
+      - {code: 2202, name: 应付账款, dir: C}
+      - {code: 2203, name: 预收账款, dir: C}
+      - {code: 2211, name: 应付职工薪酬, dir: C}
+      - {code: 2221, name: 应交税费, dir: C}
+      - {code: 222101, name: 应交增值税, dir: C}
+      - {code: 22210101, name: 进项税额, dir: D}
+      - {code: 22210102, name: 销项税额, dir: C}
+      - {code: 22210103, name: 已交税金, dir: D}
+      - {code: 22210104, name: 转出未交增值税, dir: D}
+      - {code: 222102, name: 未交增值税, dir: C}
+      - {code: 222103, name: 应交企业所得税, dir: C}
+      - {code: 222104, name: 应交个人所得税, dir: C}
+      - {code: 222105, name: 应交城市维护建设税, dir: C}
+      - {code: 222106, name: 应交教育费附加, dir: C}
+      - {code: 2231, name: 应付利息, dir: C}
+      - {code: 2232, name: 应付利润, dir: C}
+      - {code: 2241, name: 其他应付款, dir: C}
+      - {code: 2401, name: 递延收益, dir: C}
+      - {code: 2501, name: 长期借款, dir: C}
+      - {code: 2701, name: 长期应付款, dir: C}
+  - ledger: MAIN
+    code: equity
+    name: 所有者权益
+    accounts:
+      - {code: 3001, name: 实收资本, dir: C}
+      - {code: 3002, name: 资本公积, dir: C}
+      - {code: 3101, name: 盈余公积, dir: C}
+      - {code: 3103, name: 本年利润, dir: C}
+      - {code: 3104, name: 利润分配, dir: C}
+      - {code: 310415, name: 未分配利润, dir: C}
+  - ledger: MAIN
+    code: cost
+    name: 成本
+    accounts:
+      - {code: 4001, name: 生产成本, dir: D}
+      - {code: 4101, name: 制造费用, dir: D}
+      - {code: 4301, name: 研发支出, dir: D}
+      - {code: 4401, name: 工程施工, dir: D}
+      - {code: 4403, name: 机械作业, dir: D}
+  - ledger: MAIN
+    code: pl
+    name: 损益
+    pl: true
+    accounts:
+      - {code: 5001, name: 主营业务收入, dir: C}
+      - {code: 5051, name: 其他业务收入, dir: C}
+      - {code: 5111, name: 投资收益, dir: C}
+      - {code: 5301, name: 营业外收入, dir: C}
+      - {code: 5401, name: 主营业务成本, dir: D}
+      - {code: 5402, name: 其他业务成本, dir: D}
+      - {code: 5403, name: 税金及附加, dir: D}
+      - {code: 5601, name: 销售费用, dir: D}
+      - {code: 5602, name: 管理费用, dir: D}
+      - {code: 5603, name: 财务费用, dir: D}
+      - {code: 5711, name: 营业外支出, dir: D}
+      - {code: 5801, name: 所得税费用, dir: D}
+
+closing_rules:
+  - code: pl_transfer
+    name: 结转损益
+    ledger: MAIN
+    frequency: monthly
+    source_categories: [pl]
+    target: 3103
+    summary: 结转本期损益
+    exclude_from_activity: true
+    required: true
+  - code: profit_to_retained
+    name: 结转本年利润
+    ledger: MAIN
+    frequency: yearly
+    source_accounts: [3103]
+    target: 310415
+    summary: 结转本年利润
+
+reports:
+  - code: balance_sheet
+    name: 资产负债表
+    ledger: MAIN
+    layout: two_side
+    columns:
+      - {key: end, name: 期末余额, at: period_end}
+      - {key: begin, name: 年初余额, at: year_begin}
+    rows:
+      - {name: 流动资产：, side: left, bold: true}
+      - {key: 1, name: 货币资金, side: left, nat: D, indent: 1, terms: [1001, 1002, 1012]}
+      - {key: 2, name: 短期投资, side: left, nat: D, indent: 1, terms: [1101]}
+      - {key: 3, name: 应收票据, side: left, nat: D, indent: 1, terms: [1121]}
+      - {key: 4, name: 应收账款, side: left, nat: D, indent: 1, terms: ["1122:DB", "2203:DB"]}
+      - {key: 5, name: 预付账款, side: left, nat: D, indent: 1, terms: ["1123:DB", "2202:DB"]}
+      - {key: 6, name: 应收股利, side: left, nat: D, indent: 1, terms: [1131]}
+      - {key: 7, name: 应收利息, side: left, nat: D, indent: 1, terms: [1132]}
+      - {key: 8, name: 其他应收款, side: left, nat: D, indent: 1, terms: ["1221:DB", "2241:DB"]}
+      - {key: 9, name: 存货, side: left, nat: D, indent: 1, terms: [1401, 1402, 1403, 1404, 1405, 1407, 1408, 1411, 1421, 4001, 4101, 4401, 4403]}
+      - {key: 10, name: 其中：原材料, side: left, nat: D, indent: 2, terms: [1403]}
+      - {key: 11, name: 在产品, side: left, nat: D, indent: 3, terms: [4001, 4101]}
+      - {key: 12, name: 库存商品, side: left, nat: D, indent: 3, terms: [1405, 1407]}
+      - {key: 13, name: 周转材料, side: left, nat: D, indent: 3, terms: [1411]}
+      - {key: 14, name: 其他流动资产, side: left, nat: D, indent: 1, terms: [1901]}
+      - {key: 15, name: 流动资产合计, side: left, bold: true, sum: "1+2+3+4+5+6+7+8+9+14"}
+      - {name: 非流动资产：, side: left, bold: true}
+      - {key: 16, name: 长期债券投资, side: left, nat: D, indent: 1, terms: [1501]}
+      - {key: 17, name: 长期股权投资, side: left, nat: D, indent: 1, terms: [1511]}
+      - {key: 18, name: 固定资产原价, side: left, nat: D, indent: 1, terms: [1601]}
+      - {key: 19, name: 减：累计折旧, side: left, nat: C, indent: 1, terms: [1602]}
+      - {key: 20, name: 固定资产账面价值, side: left, indent: 1, sum: "18-19"}
+      - {key: 21, name: 在建工程, side: left, nat: D, indent: 1, terms: [1604]}
+      - {key: 22, name: 工程物资, side: left, nat: D, indent: 1, terms: [1605]}
+      - {key: 23, name: 固定资产清理, side: left, nat: D, indent: 1, terms: [1606]}
+      - {key: 24, name: 生产性生物资产, side: left, nat: D, indent: 1, terms: [1621, 1622]}
+      - {key: 25, name: 无形资产, side: left, nat: D, indent: 1, terms: [1701, 1702]}
+      - {key: 26, name: 开发支出, side: left, nat: D, indent: 1, terms: [4301]}
+      - {key: 27, name: 长期待摊费用, side: left, nat: D, indent: 1, terms: [1801]}
+      - {key: 28, name: 其他非流动资产, side: left, nat: D, indent: 1}
+      - {key: 29, name: 非流动资产合计, side: left, bold: true, sum: "16+17+20+21+22+23+24+25+26+27+28"}
+      - {key: 30, name: 资产总计, side: left, bold: true, sum: "15+29"}
+      - {name: 流动负债：, side: right, bold: true}
+      - {key: 31, name: 短期借款, side: right, nat: C, indent: 1, terms: [2001]}
+      - {key: 32, name: 应付票据, side: right, nat: C, indent: 1, terms: [2201]}
+      - {key: 33, name: 应付账款, side: right, nat: C, indent: 1, terms: ["2202:CB", "1123:CB"]}
+      - {key: 34, name: 预收账款, side: right, nat: C, indent: 1, terms: ["2203:CB", "1122:CB"]}
+      - {key: 35, name: 应付职工薪酬, side: right, nat: C, indent: 1, terms: [2211]}
+      - {key: 36, name: 应交税费, side: right, nat: C, indent: 1, terms: [2221]}
+      - {key: 37, name: 应付利息, side: right, nat: C, indent: 1, terms: [2231]}
+      - {key: 38, name: 应付利润, side: right, nat: C, indent: 1, terms: [2232]}
+      - {key: 39, name: 其他应付款, side: right, nat: C, indent: 1, terms: ["2241:CB", "1221:CB"]}
+      - {key: 40, name: 其他流动负债, side: right, nat: C, indent: 1}
+      - {key: 41, name: 流动负债合计, side: right, bold: true, sum: "31+32+33+34+35+36+37+38+39+40"}
+      - {name: 非流动负债：, side: right, bold: true}
+      - {key: 42, name: 长期借款, side: right, nat: C, indent: 1, terms: [2501]}
+      - {key: 43, name: 长期应付款, side: right, nat: C, indent: 1, terms: [2701]}
+      - {key: 44, name: 递延收益, side: right, nat: C, indent: 1, terms: [2401]}
+      - {key: 45, name: 其他非流动负债, side: right, nat: C, indent: 1}
+      - {key: 46, name: 非流动负债合计, side: right, bold: true, sum: "42+43+44+45"}
+      - {key: 47, name: 负债合计, side: right, bold: true, sum: "41+46"}
+      - {name: 所有者权益（或股东权益）：, side: right, bold: true}
+      - {key: 48, name: 实收资本（或股本）, side: right, nat: C, indent: 1, terms: [3001]}
+      - {key: 49, name: 资本公积, side: right, nat: C, indent: 1, terms: [3002]}
+      - {key: 50, name: 盈余公积, side: right, nat: C, indent: 1, terms: [3101]}
+      - {key: 51, name: 未分配利润, side: right, nat: C, indent: 1, terms: [3103, 3104]}
+      - {key: 52, name: 所有者权益（或股东权益）合计, side: right, bold: true, sum: "48+49+50+51"}
+      - {key: 53, name: 负债和所有者权益（或股东权益）总计, side: right, bold: true, sum: "47+52"}
+    checks:
+      - {name: 资产总计 = 负债和所有者权益总计, left: 30, right: 53}
+
+  - code: income_statement
+    name: 利润表
+    ledger: MAIN
+    layout: list
+    columns:
+      - {key: ytd, name: 本年累计金额, range: ytd}
+      - {key: month, name: 本月金额, range: period}
+    rows:
+      - {key: 1, name: 一、营业收入, bold: true, terms: [5001, 5051]}
+      - {key: 2, name: 减：营业成本, indent: 1, terms: [5401, 5402]}
+      - {key: 3, name: 税金及附加, indent: 2, terms: [5403]}
+      - {key: 11, name: 销售费用, indent: 2, terms: [5601]}
+      - {key: 14, name: 管理费用, indent: 2, terms: [5602]}
+      - {key: 18, name: 财务费用, indent: 2, terms: [5603]}
+      - {key: 20, name: 加：投资收益（损失以“-”号填列）, indent: 1, terms: [5111]}
+      - {key: 21, name: 二、营业利润（亏损以“-”号填列）, bold: true, sum: "1-2-3-11-14-18+20"}
+      - {key: 22, name: 加：营业外收入, indent: 1, terms: [5301]}
+      - {key: 24, name: 减：营业外支出, indent: 1, terms: [5711]}
+      - {key: 30, name: 三、利润总额（亏损总额以“-”号填列）, bold: true, sum: "21+22-24"}
+      - {key: 31, name: 减：所得税费用, indent: 1, terms: [5801]}
+      - {key: 32, name: 四、净利润（净亏损以“-”号填列）, bold: true, sum: "30-31"}
