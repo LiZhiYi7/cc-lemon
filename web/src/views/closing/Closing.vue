@@ -17,6 +17,11 @@ const loading = ref(false)
 const isCurrent = computed(() => period.value === periodStr(detail.value.current_period))
 const closed = computed(() => period.value < periodStr(detail.value.current_period))
 const ledgerName = (code: string) => book.ledgers.find((l) => l.code === code)?.name
+const targetName = (r: ClosingStatus) => {
+  const lid = book.ledgers.find((l) => l.code === r.ledger)?.id
+  const a = book.accounts.find((x) => x.ledger_id === lid && x.code === r.target)
+  return a ? `${a.code} ${a.name}` : r.target
+}
 
 async function load() {
   loading.value = true
@@ -36,6 +41,20 @@ async function generate(r: ClosingStatus) {
   if (res.voucher) ElMessage.success(`已生成凭证 ${res.voucher.word}-${res.voucher.number}`)
   else ElMessage.info('来源科目没有余额，无需结转')
   load()
+}
+/** 一键结转：按规则顺序执行本期适用的全部结转。 */
+const running = ref(false)
+async function generateAll() {
+  running.value = true
+  try {
+    const res = await http.post<{ name: string; voucher: Voucher | null }[]>(`${book.base}/closing/${period.value}`)
+    const n = res.filter((r) => r.voucher).length
+    if (n) ElMessage.success(`已生成 ${n} 张结转凭证`)
+    else ElMessage.info('本期没有需要结转的余额')
+  } finally {
+    running.value = false
+    load()
+  }
 }
 async function close() {
   try {
@@ -68,14 +87,18 @@ async function reopen() {
       <el-tag v-else type="info">未到期间</el-tag>
     </div>
 
-    <h3 class="step">第一步：期末结转</h3>
+    <h3 class="step">
+      第一步：期末结转
+      <el-button v-if="book.can('closing:run') && !closed" type="primary" size="small" :loading="running" style="margin-left: 12px" @click="generateAll">一键结转</el-button>
+      <span class="muted hint">按下列顺序依次执行本期适用的规则；也可逐条生成</span>
+    </h3>
     <div class="rules">
       <div v-for="r in rules" :key="r.code" class="card rule">
         <div class="rule-name">
           {{ r.name }}
           <el-tag v-if="book.multiLedger" size="small" type="info">{{ ledgerName(r.ledger) }}</el-tag>
         </div>
-        <div class="muted">{{ r.frequency === 'yearly' ? '年末执行' : '每月执行' }} · 转入 {{ r.target }}</div>
+        <div class="muted">{{ r.frequency === 'yearly' ? '年末执行' : '每月执行' }} · 转入 {{ targetName(r) }}</div>
         <div class="amount">
           <template v-if="!r.applicable"><span class="muted">本期无需执行</span></template>
           <template v-else-if="r.pending">待结转 <b>{{ fmt(r.amount, '0.00') }}</b></template>
@@ -108,7 +131,8 @@ async function reopen() {
 </template>
 
 <style scoped>
-.step { font-size: 15px; margin: 18px 0 10px; }
+.step { font-size: 15px; margin: 18px 0 10px; display: flex; align-items: center; }
+.hint { font-size: 13px; font-weight: normal; margin-left: 10px; }
 .rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .rule { display: flex; flex-direction: column; gap: 8px; }
 .rule-name { font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: center; }

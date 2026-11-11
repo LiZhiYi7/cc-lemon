@@ -44,8 +44,12 @@ type Ledger struct {
 
 // AuxType 预置的辅助核算类别。
 type AuxType struct {
-	Code string `yaml:"code"`
-	Name string `yaml:"name"`
+	Code  string `yaml:"code"`
+	Name  string `yaml:"name"`
+	Items []struct {
+		Code Str    `yaml:"code"`
+		Name string `yaml:"name"`
+	} `yaml:"items"`
 }
 
 type Category struct {
@@ -57,10 +61,11 @@ type Category struct {
 }
 
 type Account struct {
-	Code Str    `yaml:"code"`
-	Name string `yaml:"name"`
-	Dir  string `yaml:"dir"`
-	Cash bool   `yaml:"cash"`
+	Code Str      `yaml:"code"`
+	Name string   `yaml:"name"`
+	Dir  string   `yaml:"dir"`
+	Cash bool     `yaml:"cash"`
+	Aux  []string `yaml:"aux"` // 预先启用的辅助核算类别编码（仅末级科目）
 }
 
 // ParallelGroup 一组平行记账映射：来源账簿科目 → 目标账簿科目。
@@ -83,12 +88,26 @@ type ClosingRule struct {
 	Frequency        string   `yaml:"frequency" json:"frequency"` // monthly | yearly
 	SourceCategories []string `yaml:"source_categories" json:"source_categories,omitempty"`
 	SourceAccounts   []Str    `yaml:"source_accounts" json:"source_accounts,omitempty"`
-	Target           Str      `yaml:"target" json:"target"`
-	Summary          string   `yaml:"summary" json:"summary"`
+	// Sources 来源选择器，可按辅助核算项目筛选；与上面两个简写字段可并用。
+	Sources []ClosingSource `yaml:"sources" json:"sources,omitempty"`
+	// OnlyIf 仅当来源合计为 credit（贷方）或 debit（借方）余额时才结转；留空不限。
+	OnlyIf  string `yaml:"only_if" json:"only_if,omitempty"`
+	Target  Str    `yaml:"target" json:"target"`
+	Summary string `yaml:"summary" json:"summary"`
 	// ExcludeFromActivity 为真时，该规则生成的凭证不计入损益类“实际发生额”（利润表取数用）。
 	ExcludeFromActivity bool `yaml:"exclude_from_activity" json:"exclude_from_activity"`
 	// Required 为真时，结账前来源科目余额必须为零。
 	Required bool `yaml:"required" json:"required"`
+}
+
+// ClosingSource 一个来源选择器：科目类别或科目编码（含下级）命中即入选。
+type ClosingSource struct {
+	Categories []string `yaml:"categories" json:"categories,omitempty"`
+	Accounts   []Str    `yaml:"accounts" json:"accounts,omitempty"`
+	// Aux 辅助核算条件：类别编码 → 项目编码。只结转包含这些项目的余额。
+	Aux map[string]string `yaml:"aux" json:"aux,omitempty"`
+	// Unbound 科目未启用 Aux 中的类别时是否整体纳入。
+	Unbound bool `yaml:"unbound" json:"unbound,omitempty"`
 }
 
 // ReportTemplate 报表模板。
@@ -241,6 +260,13 @@ func (s *Standard) validate() error {
 	for _, l := range s.Ledgers {
 		ledgers[l.Code] = true
 	}
+	auxItems := map[string]bool{} // 类别编码 或 类别编码/项目编码
+	for _, t := range s.AuxTypes {
+		auxItems[t.Code] = true
+		for _, it := range t.Items {
+			auxItems[t.Code+"/"+string(it.Code)] = true
+		}
+	}
 	codes := map[string]bool{} // ledger/code
 	for _, c := range s.Categories {
 		if !ledgers[c.Ledger] {
@@ -258,6 +284,11 @@ func (s *Standard) validate() error {
 			if parent != "" && !codes[c.Ledger+"/"+parent] {
 				return fmt.Errorf("科目 %s 的上级 %s 未定义（须先于下级出现）", code, parent)
 			}
+			for _, t := range a.Aux {
+				if !auxItems[t] {
+					return fmt.Errorf("科目 %s 引用了未定义的辅助核算类别 %s", code, t)
+				}
+			}
 			if codes[c.Ledger+"/"+code] {
 				return fmt.Errorf("科目编码重复: %s", code)
 			}
@@ -274,6 +305,16 @@ func (s *Standard) validate() error {
 	for _, c := range s.ClosingRules {
 		if !ledgers[c.Ledger] || !codes[c.Ledger+"/"+string(c.Target)] {
 			return fmt.Errorf("结转规则 %s 的账簿或目标科目无效", c.Code)
+		}
+		if c.OnlyIf != "" && c.OnlyIf != "credit" && c.OnlyIf != "debit" {
+			return fmt.Errorf("结转规则 %s 的 only_if 只能是 credit 或 debit", c.Code)
+		}
+		for _, src := range c.Sources {
+			for t, it := range src.Aux {
+				if !auxItems[t+"/"+it] {
+					return fmt.Errorf("结转规则 %s 引用了未定义的辅助核算项目 %s/%s", c.Code, t, it)
+				}
+			}
 		}
 	}
 	for _, rp := range s.Reports {

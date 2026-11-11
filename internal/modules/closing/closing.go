@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -46,10 +44,11 @@ type Service struct {
 	books    *book.Service
 	ledgers  *ledger.Service
 	vouchers *voucher.Service
+	aux      *auxiliary.Service
 }
 
-func New(d *db.DB, books *book.Service, ledgers *ledger.Service, vouchers *voucher.Service) *Service {
-	return &Service{db: d, books: books, ledgers: ledgers, vouchers: vouchers}
+func New(d *db.DB, books *book.Service, ledgers *ledger.Service, vouchers *voucher.Service, aux *auxiliary.Service) *Service {
+	return &Service{db: d, books: books, ledgers: ledgers, vouchers: vouchers, aux: aux}
 }
 
 func (s *Service) Rules(ctx context.Context, bookID int64) ([]Rule, error) {
@@ -85,36 +84,6 @@ func applicable(r *Rule, p kernel.Period) bool {
 	return r.Frequency != FreqYearly || p.Month == 12
 }
 
-// sources 规则涉及的末级来源科目。
-func sources(r *Rule, ledgerID int64, set *ledger.Set) []*ledger.Balance {
-	var out []*ledger.Balance
-	for _, a := range set.Accounts {
-		if a.LedgerID != ledgerID || !a.IsLeaf {
-			continue
-		}
-		hit := slices.Contains(r.SourceCategories, a.Category)
-		for _, code := range r.SourceAccounts {
-			hit = hit || strings.HasPrefix(a.Code, string(code))
-		}
-		if hit {
-			out = append(out, set.ByID[a.ID])
-		}
-	}
-	return out
-}
-
-func pending(bals []*ledger.Balance) (bool, Dec) {
-	total := decimal.Zero
-	any := false
-	for _, x := range bals {
-		if n := x.EndNet(); !n.IsZero() {
-			any = true
-			total = total.Add(n)
-		}
-	}
-	return any, total.Abs()
-}
-
 type RuleStatus struct {
 	Rule
 	Applicable bool    `json:"applicable"`
@@ -129,7 +98,7 @@ func (s *Service) Status(ctx context.Context, b *book.Book, p kernel.Period) ([]
 	if err != nil {
 		return nil, err
 	}
-	set, err := s.ledgers.Balances(ctx, b, p, p, nil)
+	rv, err := s.newResolver(ctx, b, p)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +110,15 @@ func (s *Service) Status(ctx context.Context, b *book.Book, p kernel.Period) ([]
 			return nil, err
 		}
 		if st.Applicable {
-			st.Pending, st.Amount = pending(sources(&st.Rule, lg.ID, set))
+			var targetID int64
+			if t := rv.set.ByCode(lg.ID, string(st.Target)); t != nil {
+				targetID = t.Account.ID
+			}
+			pieces, err := rv.pieces(&st.Rule, lg.ID, targetID)
+			if err != nil {
+				return nil, err
+			}
+			st.Pending, st.Amount = pending(pieces)
 		}
 		if st.VoucherIDs, err = s.vouchers.IDsBySource(ctx, b.ID, p, SourceOf(st.Code)); err != nil {
 			return nil, err
@@ -182,52 +159,32 @@ func (s *Service) Generate(ctx context.Context, b *book.Book, p kernel.Period, c
 		if err != nil {
 			return err
 		}
-		set, err := s.ledgers.Balances(ctx, b, p, p, nil)
+		rv, err := s.newResolver(ctx, b, p)
 		if err != nil {
 			return err
 		}
-		target := set.ByCode(lg.ID, string(rule.Target))
+		target := rv.set.ByCode(lg.ID, string(rule.Target))
 		if target == nil {
 			return httpx.BadRequest("结转目标科目 " + string(rule.Target) + " 不存在，请调整结转规则")
 		}
 		if !target.Account.IsLeaf {
 			return httpx.BadRequest(fmt.Sprintf("结转目标科目 %s %s 有下级科目，请在结转规则中指定末级科目", target.Account.Code, target.Account.Name))
 		}
-		bindings, err := s.ledgers.AuxBindings(ctx, b.ID)
-		if err != nil {
-			return err
-		}
-		if len(bindings[target.Account.ID]) > 0 {
+		if len(rv.bindings[target.Account.ID]) > 0 {
 			return httpx.BadRequest(fmt.Sprintf("结转目标科目 %s %s 启用了辅助核算，无法自动结转", target.Account.Code, target.Account.Name))
 		}
-		combos, err := s.ledgers.ComboBalances(ctx, b.ID, p)
+		pieces, err := rv.pieces(&rule, lg.ID, target.Account.ID)
 		if err != nil {
 			return err
 		}
 		var debits, credits []voucher.LineInput
 		net := decimal.Zero
-		transfer := func(accountID int64, n Dec, aux []auxiliary.Ref) {
-			if n.IsZero() {
-				return
-			}
-			net = net.Add(n)
-			if n.IsPositive() { // 借方余额 → 贷记转出
-				credits = append(credits, voucher.LineInput{Summary: rule.Summary, AccountID: accountID, Credit: n, Aux: aux})
+		for _, pc := range pieces {
+			net = net.Add(pc.net)
+			if pc.net.IsPositive() { // 借方余额 → 贷记转出
+				credits = append(credits, voucher.LineInput{Summary: rule.Summary, AccountID: pc.accountID, Credit: pc.net, Aux: pc.aux})
 			} else {
-				debits = append(debits, voucher.LineInput{Summary: rule.Summary, AccountID: accountID, Debit: n.Neg(), Aux: aux})
-			}
-		}
-		for _, x := range sources(&rule, lg.ID, set) {
-			if x.Account.ID == target.Account.ID {
-				continue
-			}
-			if len(bindings[x.Account.ID]) == 0 {
-				transfer(x.Account.ID, x.EndNet(), nil)
-				continue
-			}
-			// 启用辅助核算的科目按项目组合逐一转平
-			for _, c := range combos[x.Account.ID] {
-				transfer(x.Account.ID, c.Net, c.Aux)
+				debits = append(debits, voucher.LineInput{Summary: rule.Summary, AccountID: pc.accountID, Debit: pc.net.Neg(), Aux: pc.aux})
 			}
 		}
 		if len(debits)+len(credits) == 0 {
@@ -248,6 +205,37 @@ func (s *Service) Generate(ctx context.Context, b *book.Book, p kernel.Period, c
 	return out, err
 }
 
+// Generated 一键结转中一条规则的结果。
+type Generated struct {
+	Code    string           `json:"code"`
+	Name    string           `json:"name"`
+	Voucher *voucher.Voucher `json:"voucher"` // nil 表示无余额可结转
+}
+
+// GenerateAll 按规则顺序依次执行本期适用的全部结转（同一事务，任何一步失败则全部不生效）。
+// 顺序即规则在账套中的排列顺序，后面的规则能看到前面规则生成的凭证。
+func (s *Service) GenerateAll(ctx context.Context, b *book.Book, p kernel.Period) ([]Generated, error) {
+	rules, err := s.Rules(ctx, b.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := []Generated{}
+	err = s.db.Tx(ctx, func(ctx context.Context) error {
+		for i := range rules {
+			if !applicable(&rules[i], p) {
+				continue
+			}
+			v, err := s.Generate(ctx, b, p, rules[i].Code)
+			if err != nil {
+				return err
+			}
+			out = append(out, Generated{Code: rules[i].Code, Name: rules[i].Name, Voucher: v})
+		}
+		return nil
+	})
+	return out, err
+}
+
 // SaveRule 调整账套的结转规则。
 func (s *Service) SaveRule(ctx context.Context, b *book.Book, code string, r Rule) error {
 	r.Code = code
@@ -257,7 +245,10 @@ func (s *Service) SaveRule(ctx context.Context, b *book.Book, code string, r Rul
 	if r.Frequency != FreqMonthly && r.Frequency != FreqYearly {
 		return httpx.BadRequest("执行频率无效")
 	}
-	if len(r.SourceCategories)+len(r.SourceAccounts) == 0 {
+	if r.OnlyIf != "" && r.OnlyIf != "credit" && r.OnlyIf != "debit" {
+		return httpx.BadRequest("only_if 只能是 credit 或 debit")
+	}
+	if len(selectors(&r)) == 0 {
 		return httpx.BadRequest("请指定来源科目或科目类别")
 	}
 	if _, err := s.books.LedgerByCode(ctx, b.ID, r.Ledger); err != nil {
@@ -404,6 +395,13 @@ func (s *Service) Routes(r chi.Router) {
 			return nil, err
 		}
 		return s.Status(r.Context(), bk(r), p)
+	}))
+	r.With(book.Require(PermRun)).Post("/closing/{period}", httpx.Handle(func(r *http.Request) (any, error) {
+		p, err := periodParam(r)
+		if err != nil {
+			return nil, err
+		}
+		return s.GenerateAll(r.Context(), bk(r), p)
 	}))
 	r.With(book.Require(PermRun)).Post("/closing/{period}/{code}", httpx.Handle(func(r *http.Request) (any, error) {
 		p, err := periodParam(r)

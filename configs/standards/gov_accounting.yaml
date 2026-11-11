@@ -20,7 +20,13 @@ aux_types:
   - {code: employee, name: 职员}
   - {code: department, name: 部门}
   - {code: project, name: 项目}
-  - {code: fund_nature, name: 资金性质}
+  # 资金性质：预算会计年末结转按它区分去向（见 closing_rules）。项目编码被结转规则引用，请勿修改编码。
+  - code: fund_nature
+    name: 资金性质
+    items:
+      - {code: "01", name: 财政拨款资金}
+      - {code: "02", name: 非财政专项资金}
+      - {code: "03", name: 其他资金}
 
 categories:
   - ledger: FIN
@@ -128,27 +134,27 @@ categories:
     pl: true
     accounts:
       - {code: 6001, name: 财政拨款预算收入, dir: C}
-      - {code: 6101, name: 事业预算收入, dir: C}
-      - {code: 6201, name: 上级补助预算收入, dir: C}
-      - {code: 6301, name: 附属单位上缴预算收入, dir: C}
+      - {code: 6101, name: 事业预算收入, dir: C, aux: [fund_nature]}
+      - {code: 6201, name: 上级补助预算收入, dir: C, aux: [fund_nature]}
+      - {code: 6301, name: 附属单位上缴预算收入, dir: C, aux: [fund_nature]}
       - {code: 6401, name: 经营预算收入, dir: C}
-      - {code: 6501, name: 债务预算收入, dir: C}
-      - {code: 6601, name: 非同级财政拨款预算收入, dir: C}
+      - {code: 6501, name: 债务预算收入, dir: C, aux: [fund_nature]}
+      - {code: 6601, name: 非同级财政拨款预算收入, dir: C, aux: [fund_nature]}
       - {code: 6602, name: 投资预算收益, dir: C}
-      - {code: 6609, name: 其他预算收入, dir: C}
+      - {code: 6609, name: 其他预算收入, dir: C, aux: [fund_nature]}
   - ledger: BUD
     code: bud_expense
     name: 预算支出
     pl: true
     accounts:
-      - {code: 7101, name: 行政支出, dir: D}
-      - {code: 7201, name: 事业支出, dir: D}
+      - {code: 7101, name: 行政支出, dir: D, aux: [fund_nature]}
+      - {code: 7201, name: 事业支出, dir: D, aux: [fund_nature]}
       - {code: 7301, name: 经营支出, dir: D}
       - {code: 7401, name: 上缴上级支出, dir: D}
       - {code: 7501, name: 对附属单位补助支出, dir: D}
       - {code: 7601, name: 投资支出, dir: D}
       - {code: 7701, name: 债务还本支出, dir: D}
-      - {code: 7901, name: 其他支出, dir: D}
+      - {code: 7901, name: 其他支出, dir: D, aux: [fund_nature]}
   - ledger: BUD
     code: bud_balance
     name: 预算结余
@@ -237,6 +243,76 @@ closing_rules:
     source_accounts: [3302, 3401, 3501]
     target: 3001
     summary: 年末转入累计盈余
+
+  # ---- 预算会计年末结转（按顺序执行）----
+  # 预算收入、支出按资金性质分别转入：财政拨款结转 / 非财政拨款结转 / 其他结余 / 经营结余。
+  - code: bud_fiscal
+    name: 结转财政拨款收支
+    ledger: BUD
+    frequency: yearly
+    sources:
+      - {accounts: [6001]}
+      - {categories: [bud_expense], aux: {fund_nature: "01"}}
+    target: 8101
+    summary: 年末结转财政拨款预算收支
+    exclude_from_activity: true
+    required: true
+  - code: bud_special
+    name: 结转非财政专项资金收支
+    ledger: BUD
+    frequency: yearly
+    sources:
+      - {categories: [bud_revenue, bud_expense], aux: {fund_nature: "02"}}
+    target: 8201
+    summary: 年末结转非财政专项资金预算收支
+    exclude_from_activity: true
+    required: true
+  - code: bud_operating
+    name: 结转经营收支
+    ledger: BUD
+    frequency: yearly
+    sources:
+      - {accounts: [6401, 7301]}
+    target: 8401
+    summary: 年末结转经营预算收支
+    exclude_from_activity: true
+    required: true
+  # 其余全部预算收支（含未区分资金性质的科目）转入其他结余；须排在上面三条之后。
+  - code: bud_other
+    name: 结转其他资金收支
+    ledger: BUD
+    frequency: yearly
+    sources:
+      - {categories: [bud_revenue, bud_expense], aux: {fund_nature: "03"}, unbound: true}
+    target: 8501
+    summary: 年末结转其他资金预算收支
+    exclude_from_activity: true
+    required: true
+  # 事业单位：其他结余、经营结余（仅盈余）转入非财政拨款结余分配，再转入非财政拨款结余。
+  # 行政单位没有结余分配环节：请把 bud_other_distribution 的目标科目改为 8202。
+  # 需要提取专用基金的，在执行 bud_distribution 之前手工录入凭证（借 8701 贷 8301）。
+  - code: bud_other_distribution
+    name: 其他结余转入结余分配
+    ledger: BUD
+    frequency: yearly
+    source_accounts: [8501]
+    target: 8701
+    summary: 其他结余转入非财政拨款结余分配
+  - code: bud_operating_distribution
+    name: 经营结余转入结余分配
+    ledger: BUD
+    frequency: yearly
+    source_accounts: [8401]
+    only_if: credit
+    target: 8701
+    summary: 经营结余转入非财政拨款结余分配
+  - code: bud_distribution
+    name: 结余分配转入非财政拨款结余
+    ledger: BUD
+    frequency: yearly
+    source_accounts: [8701]
+    target: 8202
+    summary: 非财政拨款结余分配转入非财政拨款结余
 
 reports:
   - code: balance_sheet

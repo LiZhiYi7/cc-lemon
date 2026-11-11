@@ -104,6 +104,8 @@ type env struct {
 	base     string
 	accounts map[string]int64 // 编码 → ID
 	ledgers  map[string]int64
+	fundType int64            // “资金性质”类别 ID（政府会计账套）
+	fund     map[string]int64 // 资金性质项目编码 → ID
 }
 
 func (c *client) newBook(standard string, year, month int) *env {
@@ -152,6 +154,44 @@ func (e *env) lines(ls []line) []map[string]any {
 		out = append(out, m)
 	}
 	return out
+}
+
+// ln 构造一行分录；fund 非空时附带“资金性质”辅助核算（按项目编码）。
+func (e *env) ln(code, debit, credit, fund string) map[string]any {
+	m := e.lines([]line{{code, debit, credit}})[0]
+	if fund != "" {
+		if e.fund == nil {
+			var types []struct {
+				ID   int64
+				Code string
+			}
+			var items []struct {
+				ID     int64
+				TypeID int64 `json:"type_id"`
+				Code   string
+			}
+			e.must("GET", e.base+"/aux/types", nil, &types)
+			e.must("GET", e.base+"/aux/items", nil, &items)
+			e.fund = map[string]int64{}
+			for _, tp := range types {
+				if tp.Code == "fund_nature" {
+					e.fundType = tp.ID
+				}
+			}
+			for _, it := range items {
+				if it.TypeID == e.fundType {
+					e.fund[it.Code] = it.ID
+				}
+			}
+		}
+		m["aux"] = []map[string]any{{"type_id": e.fundType, "item_id": e.fund[fund]}}
+	}
+	return m
+}
+
+func (e *env) mustPost(date string, lines ...map[string]any) {
+	e.t.Helper()
+	e.must("POST", e.base+"/vouchers", map[string]any{"date": date, "lines": lines}, nil)
 }
 
 type voucherResp struct {
@@ -370,8 +410,11 @@ func TestGovParallelFlow(t *testing.T) {
 	if len(v.Warnings) != 0 {
 		t.Fatalf("不应有提示: %+v", v)
 	}
-	e.post("2026-01-08", line{"5001", "3000", ""}, line{"1011", "", "3000"},
-		line{"7201", "3000", ""}, line{"800101", "", "3000"})
+	// 事业支出预置了“资金性质”辅助核算：不选不能保存
+	e.expect(400, "POST", e.base+"/vouchers", map[string]any{"date": "2026-01-08", "lines": e.lines([]line{
+		{"5001", "3000", ""}, {"1011", "", "3000"}, {"7201", "3000", ""}, {"800101", "", "3000"}})})
+	e.mustPost("2026-01-08", e.ln("5001", "3000", "", ""), e.ln("1011", "", "3000", ""),
+		e.ln("7201", "3000", "", "01"), e.ln("800101", "", "3000", ""))
 	// 预算会计分录自身不平衡应被拒绝
 	e.expect(400, "POST", e.base+"/vouchers", map[string]any{"date": "2026-01-09", "lines": e.lines([]line{
 		{"1002", "1", ""}, {"4001", "", "1"}, {"800102", "2", ""}, {"6001", "", "1"}})})
@@ -575,5 +618,106 @@ func TestAuxiliaryFlow(t *testing.T) {
 	eq(t, "应收账款", bs.val(t, "4", "end"), "3200")
 	if !bs.Checks[0].OK {
 		t.Fatal("资产负债表应平衡")
+	}
+}
+
+// 预算会计年末结转：按资金性质分别转入财政拨款结转、非财政拨款结转、其他结余、经营结余，
+// 再经结余分配转入非财政拨款结余。
+func TestGovBudgetYearEnd(t *testing.T) {
+	e := newClient(t).newBook("gov_accounting", 2026, 12)
+	d := "2026-12-10"
+	// 财政拨款 10000；事业收入：其他资金 5000、专项资金 2000；经营收入 800
+	e.mustPost(d, e.ln("1002", "10000", "", ""), e.ln("4001", "", "10000", ""), e.ln("800102", "10000", "", ""), e.ln("6001", "", "10000", ""))
+	e.mustPost(d, e.ln("1002", "5000", "", ""), e.ln("4101", "", "5000", ""), e.ln("800102", "5000", "", ""), e.ln("6101", "", "5000", "03"))
+	e.mustPost(d, e.ln("1002", "2000", "", ""), e.ln("4101", "", "2000", ""), e.ln("800102", "2000", "", ""), e.ln("6101", "", "2000", "02"))
+	e.mustPost(d, e.ln("1002", "800", "", ""), e.ln("4401", "", "800", ""), e.ln("800102", "800", "", ""), e.ln("6401", "", "800", ""))
+	// 事业支出：财政拨款 3000、其他资金 1000、专项 500；经营支出 300；投资支出 200（未区分资金性质 → 其他）
+	e.mustPost(d, e.ln("5001", "3000", "", ""), e.ln("1002", "", "3000", ""), e.ln("7201", "3000", "", "01"), e.ln("800102", "", "3000", ""))
+	e.mustPost(d, e.ln("5001", "1000", "", ""), e.ln("1002", "", "1000", ""), e.ln("7201", "1000", "", "03"), e.ln("800102", "", "1000", ""))
+	e.mustPost(d, e.ln("5001", "500", "", ""), e.ln("1002", "", "500", ""), e.ln("7201", "500", "", "02"), e.ln("800102", "", "500", ""))
+	e.mustPost(d, e.ln("5201", "300", "", ""), e.ln("1002", "", "300", ""), e.ln("7301", "300", "", ""), e.ln("800102", "", "300", ""))
+	e.mustPost(d, e.ln("1501", "200", "", ""), e.ln("1002", "", "200", ""), e.ln("7601", "200", "", ""), e.ln("800102", "", "200", ""))
+
+	// 未结转不能结账
+	e.expect(409, "POST", e.base+"/periods/2026-12/close", nil)
+	var gen []struct {
+		Code    string
+		Voucher *voucherResp
+	}
+	e.must("POST", e.base+"/closing/2026-12", nil, &gen)
+	done := map[string]bool{}
+	for _, g := range gen {
+		done[g.Code] = g.Voucher != nil
+	}
+	for _, code := range []string{"fin_surplus", "fin_year_distribution", "fin_year_accumulate", "bud_fiscal", "bud_special", "bud_operating", "bud_other", "bud_other_distribution", "bud_operating_distribution", "bud_distribution"} {
+		if !done[code] {
+			t.Fatalf("规则 %s 应生成凭证: %+v", code, gen)
+		}
+	}
+
+	var tb struct {
+		Rows []struct {
+			Code      string
+			Level     int
+			EndDebit  string `json:"end_debit"`
+			EndCredit string `json:"end_credit"`
+		}
+		Total struct {
+			EndDebit  string `json:"end_debit"`
+			EndCredit string `json:"end_credit"`
+		}
+	}
+	e.must("GET", fmt.Sprintf("%s/ledger/trial-balance?from=2026-12&to=2026-12&ledger_id=%d", e.base, e.ledgers["BUD"]), nil, &tb)
+	want := map[string]string{
+		"8001": "12800", // 资金结存 = 17800 收入 − 5000 支出
+		"8101": "7000",  // 财政拨款结转 = 10000 − 3000
+		"8201": "1500",  // 非财政拨款结转 = 2000 − 500
+		"8202": "4300",  // 非财政拨款结余 = 其他结余(5000−1000−200) + 经营结余(800−300)
+	}
+	for _, r := range tb.Rows {
+		bal := r.EndCredit
+		if r.Code == "8001" {
+			bal = r.EndDebit
+		}
+		if w, ok := want[r.Code]; ok {
+			eq(t, r.Code+" 年末余额", bal, w)
+			delete(want, r.Code)
+		} else if r.Level == 1 && (r.EndDebit != "0" || r.EndCredit != "0") {
+			t.Fatalf("科目 %s 年末应无余额: %+v", r.Code, r)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("缺少科目: %v", want)
+	}
+	eq(t, "预算会计期末余额合计", tb.Total.EndDebit, tb.Total.EndCredit)
+
+	// 结转后报表仍反映实际收支；重复执行结果不变
+	var bud reportResp
+	e.must("GET", e.base+"/reports/budget_revenue_expense?period=2026-12", nil, &bud)
+	eq(t, "预算收入", bud.val(t, "1", "month"), "17800")
+	eq(t, "预算收支差额", bud.val(t, "20", "month"), "12800")
+	e.must("POST", e.base+"/closing/2026-12", nil, nil)
+	e.must("GET", e.base+"/reports/budget_revenue_expense?period=2026-12", nil, &bud)
+	eq(t, "重复结转后预算收入", bud.val(t, "1", "month"), "17800")
+	e.must("POST", e.base+"/periods/2026-12/close", nil, nil)
+}
+
+// 经营亏损时经营结余不转入结余分配
+func TestGovOperatingLossStays(t *testing.T) {
+	e := newClient(t).newBook("gov_accounting", 2026, 12)
+	e.mustPost("2026-12-10", e.ln("5201", "300", "", ""), e.ln("1002", "", "300", ""), e.ln("7301", "300", "", ""), e.ln("800102", "", "300", ""))
+	e.must("POST", e.base+"/closing/2026-12", nil, nil)
+	var st []struct {
+		Code       string
+		VoucherIDs []int64 `json:"voucher_ids"`
+	}
+	e.must("GET", e.base+"/closing/2026-12", nil, &st)
+	for _, r := range st {
+		if r.Code == "bud_operating_distribution" && len(r.VoucherIDs) != 0 {
+			t.Fatal("经营亏损不应转入结余分配")
+		}
+		if r.Code == "bud_operating" && len(r.VoucherIDs) != 1 {
+			t.Fatal("经营收支应结转到经营结余")
+		}
 	}
 }

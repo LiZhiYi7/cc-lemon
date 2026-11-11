@@ -209,10 +209,29 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (*Book, error) {
 				return err
 			}
 		}
+		auxTypeIDs := map[string]int64{}
 		for i, t := range std.AuxTypes {
-			if _, err := q.Exec(ctx, `insert into aux_types(book_id, code, name, sort, is_system) values($1,$2,$3,$4,true)`,
-				b.ID, t.Code, t.Name, i); err != nil {
+			var id int64
+			if err := q.QueryRow(ctx, `insert into aux_types(book_id, code, name, sort, is_system) values($1,$2,$3,$4,true) returning id`,
+				b.ID, t.Code, t.Name, i).Scan(&id); err != nil {
 				return err
+			}
+			auxTypeIDs[t.Code] = id
+			for _, it := range t.Items {
+				if _, err := q.Exec(ctx, `insert into aux_items(book_id, type_id, code, name) values($1,$2,$3,$4)`,
+					b.ID, id, string(it.Code), it.Name); err != nil {
+					return err
+				}
+			}
+		}
+		for _, c := range std.Categories {
+			for _, a := range c.Accounts {
+				for _, t := range a.Aux {
+					if _, err := q.Exec(ctx, `insert into account_aux_types(account_id, type_id) values($1,$2)`,
+						accountIDs[c.Ledger+"/"+string(a.Code)], auxTypeIDs[t]); err != nil {
+						return err
+					}
+				}
 			}
 		}
 		for i, r := range std.Reports {

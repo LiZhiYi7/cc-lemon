@@ -111,6 +111,19 @@ function autoBalance(e: KeyboardEvent, s: Section, r: Row, field: 'debit' | 'cre
   r.debit = r.credit = ''
   r[field] = c ? fromCents(c) : ''
 }
+/** 选定科目后，启用的辅助核算类别若本凭证其他分录已选过项目，则自动带入（可再改）。 */
+function onAccount(r: Row) {
+  for (const t of book.auxTypesOf(r.account_id)) {
+    if (r.aux[t.id]) continue
+    for (const s of sections) {
+      const other = s.rows.find((x) => x !== r && x.aux[t.id])
+      if (other) {
+        r.aux[t.id] = other.aux[t.id]
+        break
+      }
+    }
+  }
+}
 function focusSummary(s: Section, i: number) {
   const r = s.rows[i]
   if (!r.summary && i > 0 && !readonly.value) r.summary = s.rows[i - 1].summary
@@ -258,7 +271,7 @@ const print = () => window.print()
               <td class="center muted">{{ i + 1 }}</td>
               <td><el-input v-model="r.summary" :disabled="readonly" @focus="focusSummary(s, i)" /></td>
               <td>
-                <AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" />
+                <AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" @change="onAccount(r)" />
                 <div v-if="book.auxTypesOf(r.account_id).length" class="aux">
                   <AuxSelect v-for="t in book.auxTypesOf(r.account_id)" :key="t.id" v-model="r.aux[t.id]" :type-id="t.id" :placeholder="'选择' + t.name" :disabled="readonly" size="small" />
                 </div>
