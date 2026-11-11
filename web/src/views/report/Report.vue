@@ -72,12 +72,12 @@ const print = () => window.print()
           </tr>
         </tbody>
       </table>
-      <table v-else class="sheet" style="max-width: 900px; margin: 0 auto">
+      <table v-else class="sheet" :style="{ maxWidth: data.columns.length > 2 ? '1180px' : '900px', margin: '0 auto' }">
         <thead>
           <tr>
-            <th>项目</th>
+            <th style="min-width: 300px">项目</th>
             <th style="width: 50px">行次</th>
-            <th v-for="c in data.columns" :key="c.key" style="width: 160px">{{ c.name }}</th>
+            <th v-for="c in data.columns" :key="c.key" :style="{ width: data.columns.length > 2 ? '140px' : '160px' }">{{ c.name }}</th>
           </tr>
         </thead>
         <tbody>

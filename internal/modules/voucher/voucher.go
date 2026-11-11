@@ -339,6 +339,7 @@ type Filter struct {
 	AccountID int64
 	Page      int
 	PageSize  int
+	Desc      bool // 最新的在前
 }
 
 type Page struct {
@@ -363,7 +364,11 @@ func (s *Service) List(ctx context.Context, bookID int64, f Filter) (*Page, erro
 		return nil, err
 	}
 	var err error
-	p.Items, err = s.query(ctx, where+` order by v.year, v.month, v.word, v.number limit $8 offset $9`,
+	order := ` order by v.year, v.month, v.word, v.number`
+	if f.Desc {
+		order = ` order by v.year desc, v.month desc, v.vdate desc, v.id desc`
+	}
+	p.Items, err = s.query(ctx, where+order+` limit $8 offset $9`,
 		append(args, f.PageSize, (f.Page-1)*f.PageSize)...)
 	return p, err
 }

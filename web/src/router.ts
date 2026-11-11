@@ -12,7 +12,8 @@ const router = createRouter({
       path: '/b/:bookId',
       component: () => import('@/views/Layout.vue'),
       children: [
-        { path: '', redirect: (to) => `/b/${to.params.bookId}/vouchers` },
+        { path: '', redirect: (to) => `/b/${to.params.bookId}/home` },
+        { path: 'home', component: () => import('@/views/Home.vue') },
         { path: 'vouchers', component: () => import('@/views/voucher/VoucherList.vue') },
         { path: 'vouchers/new', component: () => import('@/views/voucher/VoucherEdit.vue') },
         { path: 'vouchers/:voucherId', component: () => import('@/views/voucher/VoucherEdit.vue') },

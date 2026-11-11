@@ -17,7 +17,8 @@ func (s *Service) Routes(r chi.Router) {
 	r.Get("/vouchers", httpx.Handle(func(r *http.Request) (any, error) {
 		q := r.URL.Query()
 		f := Filter{Word: q.Get("word"), Status: q.Get("status"), Keyword: q.Get("keyword"),
-			AccountID: httpx.QueryInt64(r, "account_id"), Page: httpx.QueryInt(r, "page", 1), PageSize: httpx.QueryInt(r, "page_size", 50)}
+			AccountID: httpx.QueryInt64(r, "account_id"), Page: httpx.QueryInt(r, "page", 1), PageSize: httpx.QueryInt(r, "page_size", 50),
+			Desc: q.Get("order") == "desc"}
 		var err error
 		if f.From, err = kernel.ParsePeriod(q.Get("from")); err != nil {
 			return nil, httpx.BadRequest(err.Error())

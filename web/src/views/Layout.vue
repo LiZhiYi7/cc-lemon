@@ -7,6 +7,7 @@ import { menu, type MenuItem } from '@/config/menu'
 import { useBook } from '@/stores/book'
 import { periodStr } from '@/utils/period'
 import UserMenu from '@/components/UserMenu.vue'
+import { HomeFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const book = useBook()
@@ -50,6 +51,10 @@ const active = computed(() => {
     <el-aside width="200px" class="aside">
       <div class="brand">柠檬账</div>
       <el-menu :default-active="active" router :default-openeds="groups.map((g) => g.title)">
+        <el-menu-item :index="prefix + 'home'">
+          <el-icon><HomeFilled /></el-icon>
+          <span>首页</span>
+        </el-menu-item>
         <el-sub-menu v-for="g in groups" :key="g.title" :index="g.title">
           <template #title>
             <el-icon><component :is="g.icon" /></el-icon>
