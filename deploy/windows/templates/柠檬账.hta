@@ -1,0 +1,227 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta charset="utf-8">
+<title>柠檬账</title>
+<hta:application
+    id="lemonApp"
+    applicationname="柠檬账"
+    border="thin"
+    caption="yes"
+    innerborder="no"
+    maximizebutton="no"
+    minimizebutton="yes"
+    scroll="no"
+    showintaskbar="yes"
+    singleinstance="yes"
+    windowstate="normal"
+    contextmenu="no"
+    selection="no"
+/>
+<style type="text/css">
+    html, body {
+        margin: 0; padding: 0; height: 100%;
+        font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+        background: #f5f7fa; color: #1f2d3d;
+        overflow: hidden; cursor: default;
+    }
+    .app { display: block; height: 100%; }
+    .hd {
+        padding: 22px 24px 18px 24px;
+        background: #2f7d5d;
+        color: #fff;
+    }
+    .logo { font-size: 22px; font-weight: bold; letter-spacing: 2px; }
+    .sub { margin-top: 6px; font-size: 12px; color: #cfe6db; letter-spacing: 1px; }
+    .body { padding: 22px 24px 0 24px; }
+    .row { font-size: 14px; }
+    .dot {
+        display: inline-block; width: 9px; height: 9px; border-radius: 5px;
+        margin-right: 8px; vertical-align: 1px; background: #c0c4cc;
+    }
+    .dot.busy { background: #e6a23c; }
+    .dot.ok { background: #2f7d5d; }
+    .dot.err { background: #f56c6c; }
+    .hint { margin-top: 10px; font-size: 12px; color: #909399; min-height: 18px; line-height: 18px; }
+    .btns { margin-top: 20px; }
+    button {
+        font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+        font-size: 14px; padding: 9px 22px; margin-right: 10px;
+        border: 1px solid #2f7d5d; border-radius: 3px;
+        background: #2f7d5d; color: #fff; cursor: pointer;
+    }
+    button:disabled { background: #c8d6d0; border-color: #c8d6d0; cursor: default; }
+    button.ghost { background: #fff; color: #2f7d5d; }
+    button.ghost:disabled { color: #b9c4bf; border-color: #d8e0dc; background: #fff; }
+    .ft {
+        position: absolute; left: 24px; right: 24px; bottom: 16px;
+        font-size: 12px; color: #909399;
+        border-top: 1px solid #e4e7ed; padding-top: 12px;
+    }
+    .ft a { color: #2f7d5d; text-decoration: none; }
+    .ft .ver { float: right; color: #b0b4bb; }
+</style>
+</head>
+<body onload="boot()">
+<div class="app">
+    <div class="hd">
+        <div class="logo">柠檬账</div>
+        <div class="sub">局域网财务系统 · 政府会计制度（行政事业单位）</div>
+    </div>
+    <div class="body">
+        <div class="row"><span id="dot" class="dot"></span><span id="status">正在检测服务状态…</span></div>
+        <div class="hint" id="hint"></div>
+        <div class="btns">
+            <button id="openBtn" disabled onclick="openProd()">打开柠檬账</button>
+            <button id="stopBtn" class="ghost" disabled onclick="stopAll()">停止服务</button>
+        </div>
+    </div>
+    <div class="ft">
+        <a href="#" onclick="openDemo(); return false;">单机体验（仅本机，端口 18080）</a>
+        <span class="ver" id="ver"></span>
+    </div>
+</div>
+
+<script type="text/javascript">
+var ROOT = '';
+var PORT_PROD = 8080;
+var PORT_DEMO = 18080;
+var START_TIMEOUT_MS = 180000;
+
+function shell() {
+    return new ActiveXObject('WScript.Shell');
+}
+
+function rootDir() {
+    var href = unescape(window.location.href);
+    href = href.replace(/^file:\/\/\//i, '').replace(/\//g, '\\');
+    var i = href.lastIndexOf('\\');
+    return i > 0 ? href.substring(0, i) : href;
+}
+
+function openUrl(url) {
+    try { new ActiveXObject('Shell.Application').ShellExecute(url); } catch (e) { }
+}
+
+// windowStyle: 7 = 最小化到任务栏（服务本体就是这个窗口，可点开看日志）
+// 返回 false 表示系统组件不可用（例如被安全策略限制），调用方要给出替代入口
+function runScript(script, args) {
+    try {
+        var cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' +
+            ROOT + '\\scripts\\' + script + '" ' + args;
+        shell().Run(cmd, 7, false);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function cannotRun() {
+    setState('err', '无法调用系统组件', '请改用「工具」文件夹里的 2-正式使用.bat 启动');
+    setButtons(false, false);
+}
+
+function healthy(port) {
+    try {
+        var x = new ActiveXObject('MSXML2.XMLHTTP');
+        x.open('GET', 'http://127.0.0.1:' + port + '/healthz', false);
+        x.send();
+        return x.status === 200;
+    } catch (e) {
+        return false;
+    }
+}
+
+function setState(kind, text, hint) {
+    var dot = document.getElementById('dot');
+    dot.className = 'dot' + (kind ? ' ' + kind : '');
+    document.getElementById('status').innerHTML = text;
+    document.getElementById('hint').innerHTML = hint || '';
+}
+
+function setButtons(canOpen, canStop) {
+    document.getElementById('openBtn').disabled = !canOpen;
+    document.getElementById('stopBtn').disabled = !canStop;
+}
+
+function boot() {
+    ROOT = rootDir();
+    document.getElementById('ver').innerHTML = 'v1.0.0';
+    if (healthy(PORT_PROD)) {
+        onReady();
+        return;
+    }
+    startProd();
+}
+
+function startProd() {
+    setState('busy', '正在启动服务…', '首次启动会初始化数据库，约 10–60 秒，请不要关闭');
+    setButtons(false, true);
+    if (!runScript('start.ps1', '-Mode prod -NoBrowser')) { cannotRun(); return; }
+    waitFor(PORT_PROD, onReady, function () {
+        setState('err', '启动超时', '请点开任务栏里的服务窗口查看原因，或查看 logs 目录');
+        setButtons(true, true);
+    });
+}
+
+function waitFor(port, onOk, onFail) {
+    var t0 = new Date().getTime();
+    (function poll() {
+        if (healthy(port)) { onOk(); return; }
+        if (new Date().getTime() - t0 > START_TIMEOUT_MS) { onFail(); return; }
+        setTimeout(poll, 1000);
+    })();
+}
+
+function onReady() {
+    setState('ok', '服务已就绪', '服务窗口已最小化到任务栏，关闭该窗口即停止服务');
+    setButtons(true, true);
+    openUrl('http://127.0.0.1:' + PORT_PROD);
+}
+
+function openProd() {
+    if (healthy(PORT_PROD)) {
+        openUrl('http://127.0.0.1:' + PORT_PROD);
+        return;
+    }
+    startProd();
+}
+
+function openDemo() {
+    if (healthy(PORT_DEMO)) {
+        openUrl('http://127.0.0.1:' + PORT_DEMO);
+        return;
+    }
+    setState('busy', '正在启动单机体验…', '仅本机可访问，端口 18080');
+    if (!runScript('start.ps1', '-Mode demo -NoBrowser')) { cannotRun(); return; }
+    waitFor(PORT_DEMO, function () {
+        setState('ok', '单机体验已就绪', '仅本机可访问，端口 18080');
+        openUrl('http://127.0.0.1:' + PORT_DEMO);
+    }, function () {
+        setState('err', '单机体验启动超时', '请查看任务栏里的服务窗口');
+    });
+}
+
+function stopAll() {
+    setState('busy', '正在停止服务…', '');
+    setButtons(false, false);
+    if (!runScript('stop.ps1', '-Mode all')) { cannotRun(); return; }
+    var t0 = new Date().getTime();
+    (function poll() {
+        if (!healthy(PORT_PROD) && !healthy(PORT_DEMO)) {
+            setState('', '服务已停止', '双击本图标可重新启动');
+            setButtons(false, false);
+            return;
+        }
+        if (new Date().getTime() - t0 > 60000) {
+            setState('err', '停止超时', '请手动关闭任务栏里的服务窗口');
+            setButtons(true, true);
+            return;
+        }
+        setTimeout(poll, 800);
+    })();
+}
+</script>
+</body>
+</html>

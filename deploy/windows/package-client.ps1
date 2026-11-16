@@ -107,8 +107,9 @@ Write-Head '打包'
 $zipPath = Join-Path $releaseDir ('lemon-client-' + $Version + '.zip')
 if (Test-Path -LiteralPath $zipPath) { [System.IO.File]::Delete($zipPath) }
 
-& tar.exe -a -c -f $zipPath -C $stageRoot $folderName
-if ($LASTEXITCODE -ne 0) { Fail 'tar 打包失败' }
+# 用 Compress-Archive：bsdtar 写中文文件名不带 UTF-8 标志位，跨语言环境会乱码
+Compress-Archive -Path $stage -DestinationPath $zipPath -CompressionLevel Optimal -Force
+if (-not (Test-Path -LiteralPath $zipPath)) { Fail '压缩失败' }
 
 $zipSize = (Get-Item -LiteralPath $zipPath).Length
 $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash

@@ -130,10 +130,18 @@ Write-Head '组装交付包'
 Copy-Item -LiteralPath (Join-Path $repo 'web\dist') -Destination (Join-Path $stage 'web') -Recurse -Force
 Write-Done '前端资源 → web\'
 
-Get-ChildItem -LiteralPath (Join-Path $winDir 'templates') -Filter '*.bat' -File | ForEach-Object {
+Get-ChildItem -LiteralPath (Join-Path $winDir 'templates') -Filter '*.hta' -File | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stage $_.Name) -Force
 }
-Write-Done '启动快捷方式 → 根目录'
+Write-Done '桌面入口（HTA）→ 根目录'
+
+$toolsSrc = Join-Path $winDir 'templates\工具'
+if (Test-Path -LiteralPath $toolsSrc) {
+    $toolsDst = Join-Path $stage '工具'
+    if (-not (Test-Path -LiteralPath $toolsDst)) { New-Item -ItemType Directory -Path $toolsDst -Force | Out-Null }
+    Copy-Item -Path (Join-Path $toolsSrc '*.bat') -Destination $toolsDst -Force
+    Write-Done '命令行工具 → 工具\'
+}
 
 Copy-Item -LiteralPath (Join-Path $winDir 'templates\config') -Destination (Join-Path $stage 'config') -Recurse -Force
 Write-Done '配置模板 → config\'
@@ -288,8 +296,10 @@ if (Test-Path -LiteralPath $zipPath) {
     [System.IO.File]::Delete($zipPath)
 }
 
-& tar.exe -a -c -f $zipPath -C $stageRoot $folderName
-if ($LASTEXITCODE -ne 0) { Fail 'tar 打包失败' }
+# 用 Compress-Archive 而不是 tar：bsdtar 会用系统 ANSI 代码页写中文文件名
+# 且不打 UTF-8 标志位，换语言环境的 Windows 解压就成乱码。
+Compress-Archive -Path $stage -DestinationPath $zipPath -CompressionLevel Optimal -Force
+if (-not (Test-Path -LiteralPath $zipPath)) { Fail '压缩失败' }
 
 $zipSize = (Get-Item -LiteralPath $zipPath).Length
 Write-Done ('{0}  {1:N1} MB' -f (Split-Path $zipPath -Leaf), ($zipSize / 1MB))

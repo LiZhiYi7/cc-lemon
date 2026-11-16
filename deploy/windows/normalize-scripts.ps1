@@ -31,7 +31,11 @@ foreach ($f in $ps1) { Convert-ScriptFile -Path $f.FullName -WithBom $true }
 $bat = @(Get-ChildItem -LiteralPath $Dir -Recurse -Filter '*.bat' -File)
 foreach ($f in $bat) { Convert-ScriptFile -Path $f.FullName -WithBom $false }
 
-Write-Host ('已规范化 ps1: {0} 个，bat: {1} 个' -f $ps1.Count, $bat.Count) -ForegroundColor Green
+# HTA 是 HTML（可以含中文），必须 UTF-8 带 BOM，否则 mshta 会按 GBK 渲染出乱码
+$hta = @(Get-ChildItem -LiteralPath $Dir -Recurse -Filter '*.hta' -File)
+foreach ($f in $hta) { Convert-ScriptFile -Path $f.FullName -WithBom $true }
+
+Write-Host ('已规范化 ps1: {0} 个，bat: {1} 个，hta: {2} 个' -f $ps1.Count, $bat.Count, $hta.Count) -ForegroundColor Green
 
 $bad = 0
 foreach ($f in $ps1) {
