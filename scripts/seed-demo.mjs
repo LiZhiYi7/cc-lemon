@@ -244,8 +244,23 @@ async function main() {
   token = (await api('POST', '/auth/login', { username, password })).token
   const existing = await api('GET', '/books')
   const year = new Date().getFullYear()
-  await seedGov(existing, year)
-  await seedSmall(existing, year)
+
+  // 服务端可能通过 standards.allow 收敛了可用准则（例如交付给行政事业单位客户时
+  // 只开放政府会计制度）。这里按实际可用的准则决定灌哪几套演示账，避免中途报错。
+  const available = new Set((await api('GET', '/standards')).map((s) => s.code))
+
+  if (available.has('gov_accounting')) {
+    await seedGov(existing, year)
+  } else {
+    console.log('· 服务端未开放「政府会计制度（行政事业单位）」，跳过事业单位演示账')
+  }
+
+  if (available.has('small_enterprise')) {
+    await seedSmall(existing, year)
+  } else {
+    console.log('· 服务端未开放「小企业会计准则」，跳过商贸公司演示账')
+  }
+
   console.log(`完成。登录：${username} / ${password}`)
 }
 
