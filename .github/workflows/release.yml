@@ -74,6 +74,8 @@ jobs:
           cp deploy/backup.sh "dist/${NAME}/"
           cp deploy/nas/load-images.sh "dist/${NAME}/nas/"
           cp deploy/nas/.env.example "dist/${NAME}/.env.example"
+          cp docs/部署手册-NAS.md "dist/${NAME}/"
+          cp docs/使用手册.md "dist/${NAME}/"
 
           mv "${{ runner.temp }}/app.tar" "dist/${NAME}/images/app-${VERSION}-${ARCH}.tar"
           mv "${{ runner.temp }}/postgres.tar" "dist/${NAME}/images/postgres-16-alpine-${ARCH}.tar"
@@ -85,7 +87,7 @@ jobs:
             echo "构建   : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "提交   : ${GITHUB_SHA}"
             echo ""
-            echo "部署步骤见交付文档《NAS部署.md》。"
+            echo "部署步骤见《部署手册-NAS.md》，员工操作见《使用手册.md》。"
           } > "dist/${NAME}/VERSION.txt"
 
           chmod +x "dist/${NAME}/nas/load-images.sh"

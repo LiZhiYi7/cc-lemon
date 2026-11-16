@@ -159,5 +159,7 @@ make demo-data
 
 ## 文档
 
+- [docs/使用手册.md](docs/使用手册.md) —— 给会计、审核与管理员：日常记账、期末结转、账套与权限
+- [docs/部署手册-NAS.md](docs/部署手册-NAS.md) —— 给 IT：在 NAS 上用 Docker 部署、备份、升级、排障
 - [docs/features.md](docs/features.md) —— 各功能的操作位置与使用规则
 - [docs/architecture.md](docs/architecture.md) —— 架构、模块边界、数据模型、扩展方式与迭代路线

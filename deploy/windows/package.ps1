@@ -199,6 +199,20 @@ if (Test-Path -LiteralPath $docsSrc) {
     Write-Host '   提示：docs 目录不存在，客户文档将缺失' -ForegroundColor Yellow
 }
 
+# 通用手册放在仓库 docs/ 下（Windows 包与 NAS 交付共用同一份），一并带上
+$sharedDocs = @('部署手册-NAS.md', '使用手册.md')
+$docsDst = Join-Path $stage 'docs'
+if (-not (Test-Path -LiteralPath $docsDst)) { New-Item -ItemType Directory -Path $docsDst -Force | Out-Null }
+foreach ($name in $sharedDocs) {
+    $src = Join-Path $repo ('docs\' + $name)
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src -Destination (Join-Path $docsDst $name) -Force
+    } else {
+        Fail ('缺少通用手册：{0}' -f $src)
+    }
+}
+Write-Done '通用手册（NAS 部署 / 使用手册）→ docs\'
+
 foreach ($d in @('data', 'logs', 'backups', 'secrets', 'run')) {
     $p = Join-Path $stage $d
     if (-not (Test-Path -LiteralPath $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
