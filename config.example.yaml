@@ -11,4 +11,7 @@ auth:
   token_ttl: 12h
   roles_file: ""              # 自定义角色权限文件；留空用内置 configs/roles.yaml
 standards:
-  dir: ""                     # 额外的会计准则模板目录（*.yaml），同 code 覆盖内置模板
+  dir: ""
+  # 只允许使用的准则编码；留空=全部。给只做行政事业单位的客户时填：
+  #   allow: ["gov_accounting"]
+  allow: []                     # 额外的会计准则模板目录（*.yaml），同 code 覆盖内置模板

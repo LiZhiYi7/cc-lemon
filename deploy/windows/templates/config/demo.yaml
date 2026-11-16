@@ -13,3 +13,6 @@ auth:
   roles_file: ""
 standards:
   dir: ""
+  # 本交付版本只开放「政府会计制度（行政事业单位）」。
+  # 如需同时开放小企业会计准则，改成：allow: ["gov_accounting", "small_enterprise"]
+  allow: ["gov_accounting"]

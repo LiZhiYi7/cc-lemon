@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -26,6 +27,9 @@ type Config struct {
 	} `yaml:"auth"`
 	Standards struct {
 		Dir string `yaml:"dir"` // 额外的会计准则模板目录（覆盖/追加内置模板）
+		// Allow 限定可用的准则编码（留空=全部）。交付给只使用某一种准则的客户时，
+		// 用它把建账选项收敛到实际需要的范围，避免误选。
+		Allow []string `yaml:"allow"`
 	} `yaml:"standards"`
 }
 
@@ -62,6 +66,15 @@ func Load() (*Config, error) {
 	str("LEMON_DATABASE_DSN", &c.Database.DSN)
 	str("LEMON_AUTH_JWT_SECRET", &c.Auth.JWTSecret)
 	str("LEMON_STANDARDS_DIR", &c.Standards.Dir)
+	if v := os.Getenv("LEMON_STANDARDS_ALLOW"); v != "" {
+		allowed := c.Standards.Allow[:0]
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				allowed = append(allowed, part)
+			}
+		}
+		c.Standards.Allow = allowed
+	}
 	str("LEMON_AUTH_ROLES_FILE", &c.Auth.RolesFile)
 	if v := os.Getenv("LEMON_DATABASE_MAX_CONNS"); v != "" {
 		n, err := strconv.Atoi(v)

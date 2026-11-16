@@ -189,7 +189,11 @@ func (s *Str) UnmarshalJSON(b []byte) error {
 type Registry struct{ items map[string]*Standard }
 
 // Load 先读内置模板，再读外部目录（同 code 覆盖）。
-func Load(embedded fs.FS, extraDir string) (*Registry, error) {
+//
+// allow 非空时只保留其中的准则编码：交付给只使用一种准则的客户时，
+// 用它把"建账套"的选项收敛到实际需要的范围。配置了不存在的编码会直接报错，
+// 避免拼写错误导致筛掉了全部模板却毫无提示。
+func Load(embedded fs.FS, extraDir string, allow []string) (*Registry, error) {
 	r := &Registry{items: map[string]*Standard{}}
 	if err := r.loadFS(embedded, "standards"); err != nil {
 		return nil, err
@@ -199,7 +203,37 @@ func Load(embedded fs.FS, extraDir string) (*Registry, error) {
 			return nil, fmt.Errorf("加载外部准则模板: %w", err)
 		}
 	}
+	if len(allow) > 0 {
+		keep := make(map[string]bool, len(allow))
+		for _, code := range allow {
+			code = strings.TrimSpace(code)
+			if code == "" {
+				continue
+			}
+			if _, ok := r.items[code]; !ok {
+				return nil, fmt.Errorf("配置的会计准则不存在：%q（已加载：%s）", code, strings.Join(r.codes(), ", "))
+			}
+			keep[code] = true
+		}
+		if len(keep) > 0 {
+			for code := range r.items {
+				if !keep[code] {
+					delete(r.items, code)
+				}
+			}
+		}
+	}
 	return r, nil
+}
+
+// codes 返回已加载的准则编码（升序），用于错误提示。
+func (r *Registry) codes() []string {
+	out := make([]string, 0, len(r.items))
+	for code := range r.items {
+		out = append(out, code)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (r *Registry) loadFS(fsys fs.FS, dir string) error {

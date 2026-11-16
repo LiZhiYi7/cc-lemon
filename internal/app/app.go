@@ -35,7 +35,7 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 	if err := d.Migrate(ctx, migrations.FS); err != nil {
 		return nil, err
 	}
-	standards, err := standard.Load(configs.Standards, cfg.Standards.Dir)
+	standards, err := standard.Load(configs.Standards, cfg.Standards.Dir, cfg.Standards.Allow)
 	if err != nil {
 		return nil, err
 	}
