@@ -77,6 +77,13 @@ jobs:
       - name: 安装 Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: 安装 skopeo
+        # docker save 在 containerd 存储下会把 tag 解析成本机架构，
+        # 拿它导出 arm64 的 postgres 会得到 amd64 的内容；skopeo 能按目标架构导出。
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo
+
       - name: 组装镜像并导出 tar
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
@@ -89,9 +96,11 @@ jobs:
               --build-arg "BIN=deploy/.cache/lemon-$arch" \
               -t "cc-lemon:$VERSION-$arch" \
               --output "type=docker,dest=dist/app-$arch.tar" .
-            # 数据库镜像按架构分别拉取并立刻导出，避免同名 tag 互相覆盖
-            docker pull --platform "linux/$arch" postgres:16-alpine
-            docker save postgres:16-alpine -o "dist/postgres-$arch.tar"
+
+            echo "== 导出 postgres（$arch）=="
+            skopeo copy --override-os linux --override-arch "$arch" \
+              docker://postgres:16-alpine \
+              "docker-archive:dist/postgres-$arch.tar:postgres:16-alpine"
           done
           ls -lh dist
 
