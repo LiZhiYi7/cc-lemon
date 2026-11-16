@@ -1,0 +1,31 @@
+# 只做组装：二进制与前端产物已在 CI 上原生构建好。
+#
+# 为什么不直接用 Dockerfile 多阶段构建：
+#   arm64 镜像在 amd64 的 runner 上要靠 QEMU 模拟，npm ci + vite build 会被模拟执行，
+#   实测一小时以上；而前端产物与 CPU 架构无关，Go 又能直接交叉编译。
+#   于是把编译挪到宿主机，镜像里只留 COPY，arm64 组装只需十几秒。
+#
+# 构建方式（仓库根目录）：
+#   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o deploy/.cache/lemon-amd64 ./cmd/lemon
+#   docker buildx build --platform linux/amd64 -f deploy/Dockerfile.runtime \
+#     --build-arg BIN=deploy/.cache/lemon-amd64 -t cc-lemon:1.0.0-amd64 --output type=docker,dest=app.tar .
+
+FROM alpine:3.21
+
+# ca-certificates 供将来访问 HTTPS 用；tzdata 让 TZ 环境变量生效（日志与备份文件名依赖它）
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 lemon
+
+WORKDIR /app
+
+# 预编译的二进制：必须与目标平台架构一致，由调用方通过 --build-arg BIN 指定
+ARG BIN=deploy/.cache/lemon-amd64
+COPY ${BIN} /app/lemon
+COPY web/dist /app/web
+
+ENV LEMON_SERVER_ADDR=:8080 \
+    LEMON_SERVER_STATIC_DIR=/app/web
+
+USER lemon
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
+ENTRYPOINT ["/app/lemon"]

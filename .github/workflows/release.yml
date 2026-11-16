@@ -1,7 +1,12 @@
 name: Release
 
-# 构建 NAS 离线镜像包（amd64 / arm64），产物可从 Actions 页面下载。
+# 构建 NAS 离线镜像包（amd64 / arm64），产物从 Actions 页面下载。
 # 触发方式：打 tag（v1.0.0）或在 Actions 页面手动运行。
+#
+# 关键设计：编译放在 runner 宿主机上，镜像阶段只做 COPY。
+#   前端产物与 CPU 架构无关，只构建一次；Go 直接交叉编译出两种架构的二进制。
+#   否则 arm64 要在 QEMU 模拟下跑 npm ci + vite build + go build，实测一小时以上；
+#   现在整条流水线几分钟。
 
 on:
   push:
@@ -12,24 +17,19 @@ on:
       version:
         description: 版本号（会写进镜像 tag 与包名）
         required: true
-        default: '0.1.0'
+        default: '1.0.0'
 
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   nas-images:
-    name: NAS 离线包（${{ matrix.arch }}）
+    name: NAS 离线包
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            arch: amd64
-          - platform: linux/arm64
-            arch: arm64
-
     steps:
       - uses: actions/checkout@v4
 
@@ -42,64 +42,114 @@ jobs:
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 构建前端（只做一次，两种架构共用）
+        run: |
+          cd web
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 交叉编译两种架构（原生编译，无模拟）
+        run: |
+          mkdir -p deploy/.cache
+          for arch in amd64 arm64; do
+            echo "== linux/$arch =="
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
+              go build -trimpath -ldflags="-s -w" -o "deploy/.cache/lemon-$arch" ./cmd/lemon
+            ls -lh "deploy/.cache/lemon-$arch"
+          done
+
       - name: 安装 QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: 安装 Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 构建应用镜像
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: deploy/Dockerfile
-          platforms: ${{ matrix.platform }}
-          tags: cc-lemon:${{ steps.meta.outputs.version }}-${{ matrix.arch }}
-          provenance: false
-          outputs: type=docker,dest=${{ runner.temp }}/app.tar
-
-      - name: 保存 PostgreSQL 镜像
-        run: |
-          docker pull --platform ${{ matrix.platform }} postgres:16-alpine
-          docker save postgres:16-alpine -o "${{ runner.temp }}/postgres.tar"
-
-      - name: 组装交付包
+      - name: 组装镜像并导出 tar
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
-          ARCH="${{ matrix.arch }}"
-          NAME="lemon-nas-${ARCH}-${VERSION}"
-          mkdir -p "dist/${NAME}/images" "dist/${NAME}/nas"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            echo "== 组装 linux/$arch =="
+            docker buildx build \
+              --platform "linux/$arch" \
+              -f deploy/Dockerfile.runtime \
+              --build-arg "BIN=deploy/.cache/lemon-$arch" \
+              -t "cc-lemon:$VERSION-$arch" \
+              --output "type=docker,dest=dist/app-$arch.tar" .
+            # 数据库镜像按架构分别拉取并立刻导出，避免同名 tag 互相覆盖
+            docker pull --platform "linux/$arch" postgres:16-alpine
+            docker save postgres:16-alpine -o "dist/postgres-$arch.tar"
+          done
+          ls -lh dist
 
-          cp deploy/docker-compose.offline.yml "dist/${NAME}/"
-          cp deploy/backup.sh "dist/${NAME}/"
-          cp deploy/nas/load-images.sh "dist/${NAME}/nas/"
-          cp deploy/nas/.env.example "dist/${NAME}/.env.example"
-          cp docs/部署手册-NAS.md "dist/${NAME}/"
-          cp docs/使用手册.md "dist/${NAME}/"
+      - name: 组装两个交付包
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          for arch in amd64 arm64; do
+            NAME="lemon-nas-$arch-$VERSION"
+            rm -rf "dist/$NAME"
+            mkdir -p "dist/$NAME/images" "dist/$NAME/nas"
 
-          mv "${{ runner.temp }}/app.tar" "dist/${NAME}/images/app-${VERSION}-${ARCH}.tar"
-          mv "${{ runner.temp }}/postgres.tar" "dist/${NAME}/images/postgres-16-alpine-${ARCH}.tar"
+            cp deploy/docker-compose.offline.yml "dist/$NAME/"
+            cp deploy/backup.sh "dist/$NAME/"
+            cp deploy/nas/load-images.sh "dist/$NAME/nas/"
+            cp deploy/nas/.env.example "dist/$NAME/.env.example"
+            cp docs/部署手册-NAS.md "dist/$NAME/"
+            cp docs/使用手册.md "dist/$NAME/"
 
-          {
-            echo "柠檬账 NAS 离线包"
-            echo "版本   : ${VERSION}"
-            echo "架构   : ${ARCH}"
-            echo "构建   : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "提交   : ${GITHUB_SHA}"
-            echo ""
-            echo "部署步骤见《部署手册-NAS.md》，员工操作见《使用手册.md》。"
-          } > "dist/${NAME}/VERSION.txt"
+            mv "dist/app-$arch.tar" "dist/$NAME/images/app-$VERSION-$arch.tar"
+            mv "dist/postgres-$arch.tar" "dist/$NAME/images/postgres-16-alpine-$arch.tar"
 
-          chmod +x "dist/${NAME}/nas/load-images.sh"
-          tar -czf "dist/${NAME}.tar.gz" -C dist "${NAME}"
-          sha256sum "dist/${NAME}.tar.gz" > "dist/${NAME}.tar.gz.sha256"
-          ls -lh "dist/${NAME}.tar.gz"
+            {
+              echo "柠檬账 NAS 离线包"
+              echo "版本   : ${VERSION}"
+              echo "架构   : ${arch}"
+              echo "构建   : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+              echo "提交   : ${GITHUB_SHA}"
+              echo ""
+              echo "部署步骤见《部署手册-NAS.md》，员工操作见《使用手册.md》。"
+            } > "dist/$NAME/VERSION.txt"
 
-      - name: 上传产物
+            chmod +x "dist/$NAME/nas/load-images.sh"
+            tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
+            rm -rf "dist/$NAME"
+          done
+
+          cd dist
+          for f in lemon-nas-*.tar.gz; do
+            sha256sum "$f" > "$f.sha256"
+          done
+          sha256sum lemon-nas-*.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          ls -lh *.tar.gz
+
+      - name: 上传 amd64 产物
         uses: actions/upload-artifact@v4
         with:
-          name: lemon-nas-${{ matrix.arch }}-${{ steps.meta.outputs.version }}
+          name: lemon-nas-amd64-${{ steps.meta.outputs.version }}
           path: |
-            dist/*.tar.gz
-            dist/*.sha256
-          retention-days: 14
+            dist/lemon-nas-amd64-*.tar.gz
+            dist/lemon-nas-amd64-*.tar.gz.sha256
+          retention-days: 30
+
+      - name: 上传 arm64 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: lemon-nas-arm64-${{ steps.meta.outputs.version }}
+          path: |
+            dist/lemon-nas-arm64-*.tar.gz
+            dist/lemon-nas-arm64-*.tar.gz.sha256
+          retention-days: 30
