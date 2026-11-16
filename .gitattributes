@@ -1,0 +1,4 @@
+# 本项目在 Windows 上开发、在 Linux（NAS / Docker / CI）上运行。
+# 统一使用 LF：否则 Windows 下 gofmt 会把所有文件判为未格式化，
+# shell 脚本与 CI 的行为也会不一致。
+* text=auto eol=lf
