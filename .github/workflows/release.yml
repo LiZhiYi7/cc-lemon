@@ -1,0 +1,103 @@
+name: Release
+
+# 构建 NAS 离线镜像包（amd64 / arm64），产物可从 Actions 页面下载。
+# 触发方式：打 tag（v1.0.0）或在 Actions 页面手动运行。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号（会写进镜像 tag 与包名）
+        required: true
+        default: '0.1.0'
+
+permissions:
+  contents: read
+
+jobs:
+  nas-images:
+    name: NAS 离线包（${{ matrix.arch }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch: amd64
+          - platform: linux/arm64
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 计算版本号
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 安装 QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 安装 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建应用镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: ${{ matrix.platform }}
+          tags: cc-lemon:${{ steps.meta.outputs.version }}-${{ matrix.arch }}
+          provenance: false
+          outputs: type=docker,dest=${{ runner.temp }}/app.tar
+
+      - name: 保存 PostgreSQL 镜像
+        run: |
+          docker pull --platform ${{ matrix.platform }} postgres:16-alpine
+          docker save postgres:16-alpine -o "${{ runner.temp }}/postgres.tar"
+
+      - name: 组装交付包
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="lemon-nas-${ARCH}-${VERSION}"
+          mkdir -p "dist/${NAME}/images" "dist/${NAME}/nas"
+
+          cp deploy/docker-compose.offline.yml "dist/${NAME}/"
+          cp deploy/backup.sh "dist/${NAME}/"
+          cp deploy/nas/load-images.sh "dist/${NAME}/nas/"
+          cp deploy/nas/.env.example "dist/${NAME}/.env.example"
+
+          mv "${{ runner.temp }}/app.tar" "dist/${NAME}/images/app-${VERSION}-${ARCH}.tar"
+          mv "${{ runner.temp }}/postgres.tar" "dist/${NAME}/images/postgres-16-alpine-${ARCH}.tar"
+
+          {
+            echo "柠檬账 NAS 离线包"
+            echo "版本   : ${VERSION}"
+            echo "架构   : ${ARCH}"
+            echo "构建   : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "提交   : ${GITHUB_SHA}"
+            echo ""
+            echo "部署步骤见交付文档《NAS部署.md》。"
+          } > "dist/${NAME}/VERSION.txt"
+
+          chmod +x "dist/${NAME}/nas/load-images.sh"
+          tar -czf "dist/${NAME}.tar.gz" -C dist "${NAME}"
+          sha256sum "dist/${NAME}.tar.gz" > "dist/${NAME}.tar.gz.sha256"
+          ls -lh "dist/${NAME}.tar.gz"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: lemon-nas-${{ matrix.arch }}-${{ steps.meta.outputs.version }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          retention-days: 14

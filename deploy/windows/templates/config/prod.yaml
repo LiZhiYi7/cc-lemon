@@ -1,0 +1,15 @@
+# 正式使用配置（局域网内其他电脑可访问）
+# 端口如需修改，改这里的 addr，启动脚本会自动识别并同步防火墙规则。
+server:
+  addr: "0.0.0.0:8080"
+  # static_dir 与数据库连接串由启动脚本自动注入绝对路径，这里留空即可。
+  static_dir: ""
+database:
+  dsn: ""
+  max_conns: 10
+auth:
+  jwt_secret: ""
+  token_ttl: 12h
+  roles_file: ""
+standards:
+  dir: ""

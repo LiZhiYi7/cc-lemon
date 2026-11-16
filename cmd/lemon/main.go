@@ -16,9 +16,12 @@ import (
 	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
 )
 
+// version 由构建时注入：go build -ldflags "-X main.version=1.0.0"
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
-		slog.Error("启动失败", "err", err)
+		slog.Error("启动失败", "err", err, "version", version)
 		os.Exit(1)
 	}
 }
@@ -60,7 +63,7 @@ func run() error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	slog.Info("服务已启动", "addr", cfg.Server.Addr)
+	slog.Info("服务已启动", "addr", cfg.Server.Addr, "version", version)
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

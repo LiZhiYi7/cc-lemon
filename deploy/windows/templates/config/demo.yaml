@@ -1,0 +1,15 @@
+# 离线单机运行配置（仅本机可访问，不暴露到局域网）
+# 端口如需修改，改这里的 addr，启动脚本会自动识别。
+server:
+  addr: "127.0.0.1:18080"
+  # static_dir 与数据库连接串由启动脚本自动注入绝对路径，这里留空即可。
+  static_dir: ""
+database:
+  dsn: ""
+  max_conns: 10
+auth:
+  jwt_secret: ""
+  token_ttl: 12h
+  roles_file: ""
+standards:
+  dir: ""

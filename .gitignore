@@ -5,3 +5,8 @@ node_modules/
 /web/dist/
 *.log
 .DS_Store
+
+# Windows 交付包构建产物与大体积依赖
+/build/
+/dist/
+/deploy/windows/vendor/
