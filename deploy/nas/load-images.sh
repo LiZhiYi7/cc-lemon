@@ -45,8 +45,35 @@ done
 
 if [ "$loaded" -eq 0 ]; then
   echo "没有找到与 $want 匹配的镜像包（跳过了 $skip 个）。"
+  echo "说明这个交付包不是给当前架构用的，请换 $want 的包。"
   exit 1
 fi
+
+# 导入成功不等于能用：镜像本身可能是另一种架构（拿错了包、或包里打错了）。
+# 在安装阶段就核对一次，比等容器起来 exec format error 好排查得多。
+check_arch() {
+  img="$1"
+  got=$(docker image inspect --format '{{.Architecture}}' "$img" 2>/dev/null || echo '')
+  case "$want:$got" in
+    amd64:amd64 | arm64:arm64) return 0 ;;
+  esac
+  echo
+  echo "!! 镜像 $img 的架构是 [$got]，当前机器需要 [$want]。"
+  echo "!! 这个交付包用不了，请换对应架构的离线包重新执行。"
+  return 1
+}
+
+echo
+echo "核对镜像架构…"
+bad=0
+for img in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^cc-lemon:|^postgres:16-alpine' || true); do
+  check_arch "$img" || bad=1
+done
+
+if [ "$bad" -ne 0 ]; then
+  exit 1
+fi
+echo "架构核对通过（$want）"
 
 echo
 echo "已导入 $loaded 个镜像："
