@@ -1,4 +1,4 @@
-# 开发辅助：统一脚本编码
+﻿# 开发辅助：统一脚本编码
 # .ps1 → UTF-8 with BOM + CRLF；.bat → ASCII + CRLF
 #
 # 为什么需要：PowerShell 5.1 读取无 BOM 的 .ps1 时会按 ANSI 解码，

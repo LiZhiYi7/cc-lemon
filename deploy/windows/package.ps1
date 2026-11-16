@@ -141,7 +141,7 @@ Write-Done '配置模板 → config\'
 $scriptsDir = Join-Path $stage 'scripts'
 New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
 Get-ChildItem -LiteralPath $winDir -Filter '*.ps1' -File |
-    Where-Object { $_.Name -notin @('package.ps1', 'fetch-pgsql.ps1', 'normalize-scripts.ps1') } |
+    Where-Object { $_.Name -notin @('package.ps1', 'package-client.ps1', 'fetch-pgsql.ps1', 'normalize-scripts.ps1') } |
     ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $scriptsDir $_.Name) -Force }
 
 # 逐文件复制：Copy-Item 复制目录到已存在的同名目录会多嵌一层（scripts\lib\lib）
