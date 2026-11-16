@@ -1,0 +1,9 @@
+# 构建上下文排除项：这些目录只存在于开发机，送进 Docker 会让上下文变成几个 GB
+.git
+.github
+build
+docs
+deploy/windows/vendor
+web/node_modules
+web/dist
+web/dist-new
