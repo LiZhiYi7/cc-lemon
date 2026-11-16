@@ -384,25 +384,37 @@ function Invoke-WithCleanEnv {
 }
 
 function Get-HttpStatus {
-    # 直接走 HttpClient 并禁用代理：本机若配了系统代理，
-    # 访问 127.0.0.1 会被转发出去，导致健康检查假失败。
+    # 用 HttpWebRequest 而不是 HttpClient：PowerShell 5.1 默认不加载
+    # System.Net.Http 程序集，New-Object HttpClient 会抛"找不到类型"，
+    # 接口一律变成"无响应"。（HttpWebRequest 属于 System.dll，一定有。）
+    # Proxy 置空：本机若配了系统代理，访问 127.0.0.1 会被转发出去，导致假失败。
     param(
         [Parameter(Mandatory)][string]$Url,
         [int]$TimeoutSeconds = 3
     )
 
-    $client = $null
+    $req = $null
     try {
-        $handler = New-Object System.Net.Http.HttpClientHandler
-        $handler.UseProxy = $false
-        $client = New-Object System.Net.Http.HttpClient($handler)
-        $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
-        $resp = $client.GetAsync($Url).GetAwaiter().GetResult()
-        return [int]$resp.StatusCode
+        $req = [System.Net.HttpWebRequest]::Create($Url)
+        $req.Proxy = $null
+        $req.Method = 'GET'
+        $req.AllowAutoRedirect = $false
+        $req.Timeout = $TimeoutSeconds * 1000
+        $req.ReadWriteTimeout = $TimeoutSeconds * 1000
+        $resp = $req.GetResponse()
+        $code = [int]$resp.StatusCode
+        $resp.Close()
+        return $code
+    } catch [System.Net.WebException] {
+        $r = $_.Exception.Response
+        if ($r) {
+            try { return [int]$r.StatusCode } catch { return 0 }
+        }
+        return 0
     } catch {
         return 0
     } finally {
-        if ($client) { $client.Dispose() }
+        if ($req) { try { $req.Abort() } catch { } }
     }
 }
 
@@ -500,4 +512,31 @@ function Show-LogTail {
         Write-Host ('  ' + $_) -ForegroundColor DarkGray
     }
     Write-Host ''
+}
+
+# ---------------------------------------------------------------- 启动页回传
+
+function Set-StartError {
+    # 启动失败时把原因写给启动页（柠檬账.hta）。
+    # 服务窗口在失败后会关闭，客户不一定看得到；启动页能直接显示这句话。
+    # 用 UTF-16LE：启动页通过 Scripting.FileSystemObject 按 Unicode 读取，不会乱码。
+    param(
+        [Parameter(Mandatory)]$Paths,
+        [string]$Message
+    )
+
+    try {
+        if (-not (Test-Path -LiteralPath $Paths.RunDir)) {
+            New-Item -ItemType Directory -Path $Paths.RunDir -Force | Out-Null
+        }
+        $text = $Message
+        if ([string]::IsNullOrWhiteSpace($text)) { $text = '启动失败' }
+        $text | Out-File -LiteralPath (Join-Path $Paths.RunDir 'start-error.txt') -Encoding Unicode -Force
+    } catch { }
+}
+
+function Clear-StartError {
+    param([Parameter(Mandatory)]$Paths)
+
+    Remove-Item -LiteralPath (Join-Path $Paths.RunDir 'start-error.txt') -Force -ErrorAction SilentlyContinue
 }

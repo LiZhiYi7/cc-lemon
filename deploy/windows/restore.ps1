@@ -72,7 +72,7 @@ try {
     ) | Out-Null
 
     $verify = Invoke-Psql -Paths $Paths -Sql "select 1 from pg_database where datname='$($script:DbName)'"
-    if ([string]$verify.Output -notmatch '1') {
+    if (([string]$verify.Output).Trim() -ne '1') {
         Write-Fail '创建数据库失败'
         Show-NativeOutput -Result $verify -Lines 10
         throw 'createdb 失败'

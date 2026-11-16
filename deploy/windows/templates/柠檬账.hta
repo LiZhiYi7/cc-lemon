@@ -43,7 +43,9 @@
     .dot.busy { background: #e6a23c; }
     .dot.ok { background: #2f7d5d; }
     .dot.err { background: #f56c6c; }
-    .hint { margin-top: 10px; font-size: 12px; color: #909399; min-height: 18px; line-height: 18px; }
+    .hint { margin-top: 10px; font-size: 12px; color: #909399; min-height: 18px; line-height: 18px;
+            max-height: 120px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+    .hint.err { color: #c45656; }
     .btns { margin-top: 20px; }
     button {
         font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
@@ -87,7 +89,7 @@
 var ROOT = '';
 var PORT_PROD = 8080;
 var PORT_DEMO = 18080;
-var START_TIMEOUT_MS = 180000;
+var START_TIMEOUT_MS = 120000;
 
 function shell() {
     return new ActiveXObject('WScript.Shell');
@@ -123,13 +125,25 @@ function cannotRun() {
 }
 
 function healthy(port) {
+    var url = 'http://127.0.0.1:' + port + '/healthz';
+    // ServerXMLHTTP 走 WinHTTP，不受 IE/系统代理影响；再强制直连，
+    // 避免客户机器配了代理时把本机探测转发出去导致假失败。
     try {
-        var x = new ActiveXObject('MSXML2.XMLHTTP');
-        x.open('GET', 'http://127.0.0.1:' + port + '/healthz', false);
+        var x = new ActiveXObject('MSXML2.ServerXMLHTTP.6.0');
+        x.setTimeouts(800, 800, 800, 1500);
+        try { x.setProxy(1); } catch (e) { }
+        x.open('GET', url, false);
         x.send();
         return x.status === 200;
     } catch (e) {
-        return false;
+        try {
+            var y = new ActiveXObject('MSXML2.XMLHTTP');
+            y.open('GET', url, false);
+            y.send();
+            return y.status === 200;
+        } catch (e2) {
+            return false;
+        }
     }
 }
 
@@ -137,7 +151,30 @@ function setState(kind, text, hint) {
     var dot = document.getElementById('dot');
     dot.className = 'dot' + (kind ? ' ' + kind : '');
     document.getElementById('status').innerHTML = text;
-    document.getElementById('hint').innerHTML = hint || '';
+    var h = document.getElementById('hint');
+    h.className = 'hint' + (kind === 'err' ? ' err' : '');
+    h.innerHTML = hint || '';
+}
+
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// 服务窗口在启动失败后会关闭，客户不一定看得到原因；
+// 启动脚本会把原因写进 run\<mode>\start-error.txt（UTF-16），这里读出来直接显示。
+function readStartError(mode) {
+    try {
+        var fso = new ActiveXObject('Scripting.FileSystemObject');
+        var path = ROOT + '\\run\\' + mode + '\\start-error.txt';
+        if (!fso.FileExists(path)) { return ''; }
+        var f = fso.OpenTextFile(path, 1, false, -1);
+        var text = f.ReadAll();
+        f.Close();
+        return text;
+    } catch (e) {
+        return '';
+    }
 }
 
 function setButtons(canOpen, canStop) {
@@ -162,14 +199,27 @@ function startProd() {
     waitFor(PORT_PROD, onReady, function () {
         setState('err', '启动超时', '请点开任务栏里的服务窗口查看原因，或查看 logs 目录');
         setButtons(true, true);
-    });
+    }, 'prod', '服务');
 }
 
-function waitFor(port, onOk, onFail) {
+function waitFor(port, onOk, onFail, mode, label) {
     var t0 = new Date().getTime();
     (function poll() {
         if (healthy(port)) { onOk(); return; }
-        if (new Date().getTime() - t0 > START_TIMEOUT_MS) { onFail(); return; }
+
+        // 头 3 秒先别读错误文件：启动脚本要过一会儿才把它清掉，
+        // 否则可能把上一次的旧错误显示出来。
+        var elapsed = new Date().getTime() - t0;
+        if (elapsed > 3000) {
+            var err = readStartError(mode);
+            if (err) {
+                setState('err', (label || '服务') + '没有启动成功', escapeHtml(err));
+                setButtons(true, true);
+                return;
+            }
+        }
+
+        if (elapsed > START_TIMEOUT_MS) { onFail(); return; }
         setTimeout(poll, 1000);
     })();
 }
@@ -200,7 +250,7 @@ function openDemo() {
         openUrl('http://127.0.0.1:' + PORT_DEMO);
     }, function () {
         setState('err', '单机体验启动超时', '请查看任务栏里的服务窗口');
-    });
+    }, 'demo', '单机体验');
 }
 
 function stopAll() {

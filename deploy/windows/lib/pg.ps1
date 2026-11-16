@@ -6,9 +6,10 @@
 # - 参数一律写进 postgresql.conf，命令行保持最简，避免 Windows 上的引号转义问题；
 # - 启动前先判断"是不是已经在跑"，在跑就复用，绝不重复 initdb / start；
 # - 所有原生调用走 Invoke-Native（重定向到文件），不用管道，避免子进程继承句柄卡死；
-# - 成败一律用"可观测结果"判断（PG_VERSION 是否存在、pg_isready 的输出、
-#   查询结果、文件大小），不依赖进程退出码——PowerShell 5.1 下 Start-Process
-#   返回的进程对象取不到 ExitCode。
+# - 成败一律用"可观测结果"判断（PG_VERSION 是否存在、端口能否连通、
+#   查询结果、文件大小），既不依赖进程退出码，也不解析任何提示文本——
+#   PostgreSQL 命令行的提示语会随系统语言变化（中文 Windows 上是中文），
+#   按英文文本匹配会在客户机器上误判。
 
 function Get-PgExe {
     param(
@@ -36,17 +37,53 @@ function Test-PgInitialized {
     return (Test-Path -LiteralPath (Join-Path $Paths.PgData 'PG_VERSION'))
 }
 
+function Get-PgPid {
+    # 从 postmaster.pid 首行取 PID，再确认该 PID 确实是 postgres。
+    # 返回 0 表示没在运行（含僵尸 pid 文件）。
+    param([Parameter(Mandatory)]$Paths)
+
+    $pidFile = Join-Path $Paths.PgData 'postmaster.pid'
+    if (-not (Test-Path -LiteralPath $pidFile)) { return 0 }
+
+    $first = Get-Content -LiteralPath $pidFile -TotalCount 1 -ErrorAction SilentlyContinue
+    $pgPid = 0
+    if (-not [int]::TryParse(([string]$first).Trim(), [ref]$pgPid)) { return 0 }
+
+    $proc = Get-Process -Id $pgPid -ErrorAction SilentlyContinue
+    if ($proc -and $proc.ProcessName -eq 'postgres') { return $pgPid }
+    return 0
+}
+
 function Test-PgRunning {
+    # 只看"进程还在不在"，不看 pg_ctl status 的文字：
+    # 中文 Windows 上 pg_isready / pg_ctl 的部分消息会被本地化
+    # （英文 "server is running" → 中文），按文本判断会误判。
     param([Parameter(Mandatory)]$Paths)
 
     if (-not (Test-PgInitialized -Paths $Paths)) { return $false }
+    return ((Get-PgPid -Paths $Paths) -gt 0)
+}
 
-    $pgCtl = Get-PgExe -Paths $Paths -Name 'pg_ctl'
-    $data = Get-PgDataPath -Paths $Paths
-    $r = Invoke-Native -FilePath $pgCtl -Arguments @('-D', $data, 'status') -TimeoutMs 15000
-    $text = [string]$r.Output
-    if ($text -match 'no server running') { return $false }
-    return ($text -match 'server is running')
+function Test-PgAccepting {
+    # PostgreSQL 只在初始化完成后才监听端口，因此 TCP 握手成功即可视为就绪。
+    # 同样不依赖任何本地化文本。
+    param(
+        [Parameter(Mandatory)]$Paths,
+        [int]$TimeoutMs = 1500
+    )
+
+    $client = $null
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect('127.0.0.1', $Paths.Mode.PgPort, $null, $null)
+        if (-not $iar.AsyncWaitHandle.WaitOne($TimeoutMs)) { return $false }
+        $client.EndConnect($iar)
+        return $client.Connected
+    } catch {
+        return $false
+    } finally {
+        if ($client) { try { $client.Close() } catch { } }
+    }
 }
 
 function Clear-StalePid {
@@ -182,12 +219,18 @@ function Start-PgCluster {
     }
 
     Write-Step '启动数据库'
-    # 不用 -w：pg_ctl 的就绪判定依赖连接认证，失败时要干等超时；
-    # 这里改成自己轮询 pg_isready，与认证无关，更快更准。
-    $r = Invoke-Native -FilePath $pgCtl -TimeoutMs 60000 -Arguments @('-D', $data, '-l', $log, 'start')
+    # pg_ctl 从 10 起 start 默认带 -w（等就绪，它看 postmaster.pid 的状态行，
+    # 不做连接认证，因此不会因密码问题空等）；这里显式给 -t，让 pg_ctl 自己的
+    # 超时先于我们杀进程，失败时才能拿到它的错误文本。
+    $r = Invoke-Native -FilePath $pgCtl -TimeoutMs 90000 -Arguments @('-D', $data, '-l', $log, '-w', '-t', '60', 'start')
 
-    if (-not (Wait-PgReady -Paths $Paths -TimeoutSeconds 90)) {
+    # 就绪判定走 TCP 探测，不看任何本地化文本
+    if (-not (Wait-PgReady -Paths $Paths -TimeoutSeconds 45)) {
         Write-Fail '数据库启动失败或超时。'
+        $hint = $r.Output
+        if ($hint -match 'another server|已经有一个服务器|另一个服务器') {
+            Write-Info '看起来数据库已经在这个数据目录上运行了，请先执行「3-停止运行」。'
+        }
         Show-NativeOutput -Result $r -Lines 12
         Show-LogTail -Path $Paths.PgLog -Lines 25
         throw 'PostgreSQL 启动失败'
@@ -258,7 +301,9 @@ function Ensure-LemonDatabase {
     Write-PgPassFile -Paths $Paths -Password $Password
 
     $check = Invoke-Psql -Paths $Paths -Sql "select 1 from pg_database where datname='$($script:DbName)'"
-    if ([string]$check.Output -match '1') {
+    # 必须精确比较：psql 出错时把中文错误写到同一路输出里，
+    # 用 -match '1' 会被端口号（55433）之类的数字误命中。
+    if (([string]$check.Output).Trim() -eq '1') {
         Write-Ok '业务数据库已存在'
         return
     }
@@ -271,7 +316,7 @@ function Ensure-LemonDatabase {
     ) | Out-Null
 
     $verify = Invoke-Psql -Paths $Paths -Sql "select 1 from pg_database where datname='$($script:DbName)'"
-    if ([string]$verify.Output -notmatch '1') {
+    if (([string]$verify.Output).Trim() -ne '1') {
         Write-Fail '创建业务数据库失败'
         Show-NativeOutput -Result $verify -Lines 10
         throw 'createdb 失败'
@@ -285,12 +330,22 @@ function Wait-PgReady {
         [int]$TimeoutSeconds = 60
     )
 
-    $isReady = Get-PgExe -Paths $Paths -Name 'pg_isready'
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $goneSince = $null
+
     while ((Get-Date) -lt $deadline) {
-        $r = Invoke-Native -FilePath $isReady -TimeoutMs 10000 -Arguments @('-h', '127.0.0.1', '-p', $Paths.Mode.PgPort)
-        if ([string]$r.Output -match 'accepting connections') { return $true }
-        Start-Sleep -Milliseconds 500
+        if (Test-PgAccepting -Paths $Paths) { return $true }
+
+        # 进程已经不在时不必等满超时（给 5 秒宽限期，覆盖刚启动还没写 pid 的瞬间）
+        if (Test-PgRunning -Paths $Paths) {
+            $goneSince = $null
+        } elseif ($null -eq $goneSince) {
+            $goneSince = Get-Date
+        } elseif (((Get-Date) - $goneSince).TotalSeconds -ge 5) {
+            return $false
+        }
+
+        Start-Sleep -Milliseconds 400
     }
     return $false
 }
