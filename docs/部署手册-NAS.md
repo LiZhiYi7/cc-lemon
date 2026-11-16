@@ -211,7 +211,7 @@ docker compose -f docker-compose.offline.yml ps
 curl http://127.0.0.1:8080/healthz
 ```
 
-返回 `ok` 即服务正常（返回 503 表示服务起来了但数据库连不上，看 `docker compose logs app`）。
+返回 `ok` 即服务正常（返回 503 表示服务起来了但数据库连不上，看 `docker compose logs app`）。NAS 上没有 `curl` 时，用 `wget -qO- http://127.0.0.1:8080/healthz`。
 
 浏览器打开：
 
@@ -382,6 +382,7 @@ docker compose -f docker-compose.offline.yml logs --tail=20 backup
 升级前、批量导入前、年底结账前，建议手动备一次：
 
 ```sh
+mkdir -p /volume1/backup
 docker compose -f docker-compose.offline.yml exec -T db \
   pg_dump -U lemon -d lemon -Fc > /volume1/backup/lemon-manual-$(date +%Y%m%d-%H%M).dump
 ```
