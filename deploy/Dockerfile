@@ -2,8 +2,8 @@
 # 在仓库根目录执行：docker build -f deploy/Dockerfile -t cc-lemon .
 
 FROM node:22-alpine AS web
-# 国内服务器构建时默认走阿里云 npm 镜像；需要官方源可传 --build-arg NPM_REGISTRY=https://registry.npmjs.org
-ARG NPM_REGISTRY=https://registry.npmmirror.com
+# 默认走官方源（GitHub Actions 构建用）；国内服务器在 compose 里覆盖为 npmmirror
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm config set registry "$NPM_REGISTRY" && npm ci --no-audit --no-fund
@@ -11,8 +11,8 @@ COPY web/ ./
 RUN npm run build
 
 FROM golang:1.26-alpine AS server
-# 同理：默认走 goproxy.cn，避免国内构建时拉不到依赖
-ARG GOPROXY=https://goproxy.cn,direct
+# 同理：默认官方代理，国内部署时用 compose 传入 goproxy.cn
+ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 WORKDIR /src
 COPY go.mod go.sum ./

@@ -23,6 +23,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      # 国内网络下构建时走镜像源；境外或 CI 构建会把这两个值覆盖成官方源
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     image: cc-lemon:latest
     restart: unless-stopped
     depends_on:
