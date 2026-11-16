@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: 后端（Go + PostgreSQL）
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: lemon_test
+          POSTGRES_USER: lemon
+          POSTGRES_PASSWORD: lemon
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lemon -d lemon_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      LEMON_TEST_DSN: postgres://lemon:lemon@localhost:5432/lemon_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 检查格式
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: 静态检查
+        run: go vet ./...
+
+      - name: 编译
+        run: go build ./...
+
+      - name: 测试（端到端，含真实数据库）
+        run: go test ./... -count=1
+
+  web:
+    name: 前端（Vue + TypeScript）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查与构建
+        run: npm run build
