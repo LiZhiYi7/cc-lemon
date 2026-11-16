@@ -52,6 +52,36 @@ function Remove-Tree {
     }
 }
 
+function Assert-WebDist {
+    # 前端产物完整性检查。缺 assets 时页面会白屏（浏览器拿到的是 index.html），
+    # 这种残包一旦发出去，客户看到的就是一片空白，所以宁可不打包。
+    param([Parameter(Mandatory)][string]$Dist)
+
+    $index = Join-Path $Dist 'index.html'
+    if (-not (Test-Path -LiteralPath $index)) { Fail ('缺少前端入口：{0}（去掉 -SkipWeb 重新构建）' -f $index) }
+
+    $assetsDir = Join-Path $Dist 'assets'
+    if (-not (Test-Path -LiteralPath $assetsDir)) { Fail 'web\dist\assets 不存在，前端产物不完整（去掉 -SkipWeb 重新构建）' }
+
+    $jsCount = @(Get-ChildItem -LiteralPath $assetsDir -Filter '*.js' -File -ErrorAction SilentlyContinue).Count
+    if ($jsCount -eq 0) { Fail 'web\dist\assets 里没有任何 .js，前端产物不完整（去掉 -SkipWeb 重新构建）' }
+
+    $html = [System.IO.File]::ReadAllText($index, [System.Text.Encoding]::UTF8)
+    $refs = [regex]::Matches($html, '(?:src|href)="(/[^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+    if ($refs.Count -eq 0) { Fail 'web\dist\index.html 里没有任何资源引用，产物异常' }
+
+    $missing = @()
+    foreach ($r in $refs) {
+        $p = Join-Path $Dist (($r.TrimStart('/')) -replace '/', '\')
+        if (-not (Test-Path -LiteralPath $p)) { $missing += $r }
+    }
+    if ($missing.Count -gt 0) {
+        Fail ('index.html 引用的资源不存在：{0}（前端产物与入口文件版本不一致，重新构建）' -f ($missing -join ', '))
+    }
+
+    return $jsCount
+}
+
 if (-not $PgZip) { $PgZip = Join-Path $winDir 'vendor\postgresql-16.13-1-windows-x64-binaries.zip' }
 
 Write-Host ''
@@ -82,7 +112,8 @@ if ($SkipWeb) {
     if (-not (Test-Path -LiteralPath (Join-Path $repo 'web\dist\index.html'))) {
         Fail 'web\dist 不存在，去掉 -SkipWeb 重新打包'
     }
-    Write-Done '复用已有 web\dist'
+    $jsCount = Assert-WebDist -Dist (Join-Path $repo 'web\dist')
+    Write-Done ('复用已有 web\dist（{0} 个脚本）' -f $jsCount)
 } else {
     Push-Location (Join-Path $repo 'web')
     try {
@@ -93,8 +124,8 @@ if ($SkipWeb) {
     } finally {
         Pop-Location
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $repo 'web\dist\index.html'))) { Fail '前端构建产物缺失' }
-    Write-Done '前端构建完成'
+    $jsCount = Assert-WebDist -Dist (Join-Path $repo 'web\dist')
+    Write-Done ('前端构建完成（{0} 个脚本）' -f $jsCount)
 }
 
 # ---------------------------------------------------------------- 目录
@@ -265,6 +296,11 @@ if ($secretHits.Count -gt 0) {
 
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'lemon.exe'))) { $problems.Add('lemon.exe 缺失') }
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'web\index.html'))) { $problems.Add('web\index.html 缺失') }
+if (-not (Test-Path -LiteralPath (Join-Path $stage 'web\assets'))) {
+    $problems.Add('web\assets 缺失（客户打开会白屏）')
+} elseif (@(Get-ChildItem -LiteralPath (Join-Path $stage 'web\assets') -File).Count -eq 0) {
+    $problems.Add('web\assets 为空（客户打开会白屏）')
+}
 
 if ($problems.Count -gt 0) {
     foreach ($p in $problems) { Write-Host ('   !!  {0}' -f $p) -ForegroundColor Red }
