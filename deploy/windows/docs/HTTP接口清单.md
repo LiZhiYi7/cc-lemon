@@ -149,7 +149,7 @@ curl -s http://127.0.0.1:8080/api/v1/books -H "Authorization: Bearer $TOKEN"
 
 ### 凭证图片（附件）
 
-图片不存数据库，按 `附件目录/attachments/{账套}/{凭证}/` 存放，目录内 `index.json` 记录文件名、大小、上传人、时间。
+图片不存数据库，存放在配置的附件目录下：`{附件目录}/{账套}/{凭证}/`（Windows 上附件目录是 `attachments\<模式>`，NAS 上是 `data/attachments`），目录内 `index.json` 记录文件名、大小、上传人、时间。
 
 - 上传字段：`file`（必填，JPG / PNG / WebP）、`thumb`（可选，前端生成的 JPEG 缩略图）。
 - 服务端只按文件头判断类型，不认扩展名与客户端声明的 `Content-Type`；**不接受 SVG**。

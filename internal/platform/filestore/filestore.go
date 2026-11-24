@@ -94,12 +94,14 @@ func New(root string, maxFile int64, maxFiles int) *Store {
 		return s
 	}
 	s.root = abs
-	if err := os.MkdirAll(filepath.Join(s.root, "attachments"), 0o755); err != nil {
+	// 配置里的目录就是附件根，不再另起一层（否则会落成
+	// attachments\prod\attachments\<账套>\<凭证> 这种重复目录）。
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
 		s.disabled = true
 		return s
 	}
 	// 写探针：容器里目录存在但属主不对时，只有真正写一次才能发现。
-	probe := filepath.Join(s.root, "attachments", ".probe")
+	probe := filepath.Join(s.root, ".probe")
 	if err := os.WriteFile(probe, []byte("ok"), 0o644); err != nil {
 		s.disabled = true
 		return s
@@ -131,9 +133,9 @@ func (s *Store) dir(bookID, voucherID int64) (string, error) {
 	if bookID <= 0 || voucherID <= 0 {
 		return "", ErrBadID
 	}
-	dir := filepath.Join(s.root, "attachments", fmt.Sprint(bookID), fmt.Sprint(voucherID))
+	dir := filepath.Join(s.root, fmt.Sprint(bookID), fmt.Sprint(voucherID))
 	// 双重保险：拼出来的路径必须仍在根目录下。
-	if !strings.HasPrefix(dir, filepath.Join(s.root, "attachments")+string(os.PathSeparator)) {
+	if !strings.HasPrefix(dir, s.root+string(os.PathSeparator)) {
 		return "", ErrBadID
 	}
 	return dir, nil
