@@ -213,12 +213,12 @@ foreach ($name in $sharedDocs) {
 }
 Write-Done '通用手册（NAS 部署 / 使用手册）→ docs\'
 
-foreach ($d in @('data', 'logs', 'backups', 'secrets', 'run')) {
+foreach ($d in @('data', 'logs', 'backups', 'secrets', 'run', 'attachments')) {
     $p = Join-Path $stage $d
     if (-not (Test-Path -LiteralPath $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
     Set-Content -LiteralPath (Join-Path $p '.keep') -Value '' -Encoding ascii
 }
-Write-Done '运行时目录 → data\ logs\ backups\ secrets\ run\'
+Write-Done '运行时目录 → data\ logs\ backups\ secrets\ run\ attachments\'
 
 # ---------------------------------------------------------------- PostgreSQL
 

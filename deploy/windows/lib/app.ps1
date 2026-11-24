@@ -22,6 +22,7 @@ function Start-YangheApp {
     $env:YANGHE_FINANCE_SERVER_ADDR = $Endpoint.Addr
     $env:YANGHE_FINANCE_SERVER_STATIC_DIR = $Paths.Web
     $env:YANGHE_FINANCE_DATABASE_DSN = $dsn
+    $env:YANGHE_FINANCE_STORAGE_DIR = $Paths.Attachments
 
     Write-Step '启动阳和财务系统服务'
     $proc = Invoke-WithCleanEnv {

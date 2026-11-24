@@ -503,9 +503,29 @@ function Backup-YangheDatabase {
         Write-Warn2 '备份文件已生成，但校验未通过，请检查磁盘空间。'
     }
 
+    # 凭证图片在文件系统里，数据库备份里没有，必须单独打包，
+    # 否则恢复之后凭证上的图片全部丢失。
+    $filesZip = $null
+    if ((Test-Path -LiteralPath $Paths.Attachments) -and
+        @(Get-ChildItem -LiteralPath $Paths.Attachments -Recurse -File -ErrorAction SilentlyContinue).Count -gt 0) {
+        $filesZip = Join-Path $Paths.BackupDir ('yanghe-finance-files-' + $stamp + '.zip')
+        $zipTmp = $filesZip + '.partial'
+        try {
+            Compress-Archive -Path (Join-Path $Paths.Attachments '*') -DestinationPath $zipTmp -CompressionLevel Optimal -Force -ErrorAction Stop
+            Move-Item -LiteralPath $zipTmp -Destination $filesZip -Force
+            Write-Ok ('图片附件已打包：{0}' -f (Split-Path -Leaf $filesZip))
+        } catch {
+            Remove-Item -LiteralPath $zipTmp -Force -ErrorAction SilentlyContinue
+            $filesZip = $null
+            Write-Warn2 '图片附件打包失败（数据库备份不受影响），请在「运维手册」里手工复制 attachments 目录。'
+        }
+    }
+
     $expired = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'yanghe-finance-*.dump' -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$KeepDays) })
-    foreach ($f in $expired) {
+    $expiredFiles = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'yanghe-finance-files-*.zip' -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$KeepDays) })
+    foreach ($f in ($expired + $expiredFiles)) {
         Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue
     }
 
@@ -513,5 +533,5 @@ function Backup-YangheDatabase {
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-1) } |
         ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 
-    return [pscustomobject]@{ File = $final; Size = $size; Removed = $expired.Count }
+    return [pscustomobject]@{ File = $final; Size = $size; Files = $filesZip; Removed = $expired.Count }
 }

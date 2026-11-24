@@ -25,8 +25,12 @@ RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 yanghe
 WORKDIR /app
 COPY --from=server /out/yanghe-finance /app/yanghe-finance
 COPY --from=web /src/web/dist /app/web
+# 凭证图片落在 /app/data/attachments。容器以 uid 10001 运行，
+# 目录必须在这里建好并改属主，否则挂了卷也会 EACCES。
+RUN mkdir -p /app/data/attachments && chown -R yanghe:yanghe /app/data
 ENV YANGHE_FINANCE_SERVER_ADDR=:8080 \
-    YANGHE_FINANCE_SERVER_STATIC_DIR=/app/web
+    YANGHE_FINANCE_SERVER_STATIC_DIR=/app/web \
+    YANGHE_FINANCE_STORAGE_DIR=/app/data/attachments
 USER yanghe
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1

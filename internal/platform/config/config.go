@@ -31,6 +31,11 @@ type Config struct {
 		// 用它把建账选项收敛到实际需要的范围，避免误选。
 		Allow []string `yaml:"allow"`
 	} `yaml:"standards"`
+	Storage struct {
+		Dir       string `yaml:"dir"`         // 凭证附件目录；留空则关闭附件功能
+		MaxFileMB int    `yaml:"max_file_mb"` // 单张图片上限
+		MaxFiles  int    `yaml:"max_files"`   // 单张凭证最多几张图片
+	} `yaml:"storage"`
 }
 
 func Load() (*Config, error) {
@@ -39,6 +44,9 @@ func Load() (*Config, error) {
 	c.Database.DSN = "postgres://yanghe_finance:yanghe_finance@localhost:5432/yanghe_finance?sslmode=disable"
 	c.Database.MaxConns = 10
 	c.Auth.TokenTTL = 12 * time.Hour
+	c.Storage.Dir = "data/attachments"
+	c.Storage.MaxFileMB = 10
+	c.Storage.MaxFiles = 20
 
 	path := os.Getenv("YANGHE_FINANCE_CONFIG")
 	if path == "" {
@@ -89,6 +97,21 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("YANGHE_FINANCE_AUTH_TOKEN_TTL: %w", err)
 		}
 		c.Auth.TokenTTL = d
+	}
+	str("YANGHE_FINANCE_STORAGE_DIR", &c.Storage.Dir)
+	if v := os.Getenv("YANGHE_FINANCE_STORAGE_MAX_FILE_MB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("YANGHE_FINANCE_STORAGE_MAX_FILE_MB: %w", err)
+		}
+		c.Storage.MaxFileMB = n
+	}
+	if v := os.Getenv("YANGHE_FINANCE_STORAGE_MAX_FILES"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("YANGHE_FINANCE_STORAGE_MAX_FILES: %w", err)
+		}
+		c.Storage.MaxFiles = n
 	}
 	return c, nil
 }

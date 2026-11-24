@@ -184,10 +184,19 @@ vi .env          # 或用 NAS 的文本编辑器打开
 | --- | --- | --- |
 | `HTTP_PORT` | `8080` | 对外端口，冲突时改这里 |
 | `TZ` | `Asia/Shanghai` | 时区，影响日志与备份文件名 |
-| `DATA_DIR` | `./data` | 数据库文件的存放位置 |
+| `DATA_DIR` | `./data` | 数据库文件与凭证图片的存放位置 |
 | `BACKUP_DIR` | `./backups` | 备份文件存放位置 |
 | `BACKUP_KEEP_DAYS` | `30` | 备份保留天数 |
 | `TOKEN_TTL` | `12h` | 登录有效期，超过需重新登录 |
+
+> **凭证图片目录的权限**。`${DATA_DIR}/attachments` 由 app 容器（uid 10001）写入。
+> 宿主机上这个目录如果被 root 先创建出来，上传图片会报 `503 附件存储不可用`。首次启动后执行一次：
+>
+> ```sh
+> sudo chown -R 10001:10001 data/attachments
+> ```
+>
+> 群晖/威联通的 Docker 界面部署时，同样需要在该目录的「属性 → 权限」里让容器用户可写。
 
 > **关于密码字符**：`DB_PASSWORD` 会被拼进 `postgres://用户:密码@db:5432/yanghe_finance` 这样的连接串。如果密码里含 `@ : / ? # &` 等字符，连接串会被解析错，表现为应用一直连不上数据库。所以这里限制为**字母 + 数字**，例如 `Yanghe2026NasDb7x4Kq`。
 
@@ -364,7 +373,9 @@ pg_dump -h db -U yanghe_finance -d yanghe_finance -Fc -f /backups/yanghe-finance
 ```
 
 - 先写 `.partial` 临时文件，成功后再改名，避免留下半截备份
-- 自动删除超过 `BACKUP_KEEP_DAYS`（默认 30）天的备份
+- **凭证图片单独打包**为 `yanghe-finance-files-YYYYmmdd-HHMMSS.tar.gz`（来源 `${DATA_DIR}/attachments`）。
+  图片不在数据库里，只备份 `.dump` 的话，恢复之后凭证上的发票、回单会全部丢失。
+- 自动删除超过 `BACKUP_KEEP_DAYS`（默认 30）天的备份，数据库与图片包一起清理
 - 文件位置：NAS 上 `${BACKUP_DIR}` 目录（默认安装目录下的 `backups/`）
 
 检查：
@@ -403,6 +414,9 @@ docker compose -f docker-compose.offline.yml stop app
 cat backups/yanghe-finance-20260101-020000.dump | \
   docker compose -f docker-compose.offline.yml exec -T db \
   pg_restore -U yanghe_finance -d yanghe_finance --clean --if-exists --no-owner
+
+# 2.1) 恢复凭证图片（数据库备份里没有图片，必须单独解压）
+tar -xzf backups/yanghe-finance-files-20260101-020000.tar.gz -C data/attachments
 
 # 3) 启动应用
 docker compose -f docker-compose.offline.yml start app

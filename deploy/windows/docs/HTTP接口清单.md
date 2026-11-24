@@ -139,9 +139,24 @@ curl -s http://127.0.0.1:8080/api/v1/books -H "Authorization: Bearer $TOKEN"
 | DELETE | `/books/{id}/vouchers/{voucherID}` | 删除凭证 | `voucher:write` |
 | POST | `/books/{id}/vouchers/renumber` | 整理凭证号 | `voucher:write` |
 | POST | `/books/{id}/vouchers/review` | 批量审核 / 取消审核 | `voucher:review` |
+| GET | `/books/{id}/vouchers/{voucherID}/attachments` | 凭证图片列表（无图返回 `[]`） | 成员 |
+| GET | `/books/{id}/vouchers/{voucherID}/attachments/{attachmentID}` | 取图片二进制；`?thumb=1` 取缩略图 | 成员 |
+| POST | `/books/{id}/vouchers/{voucherID}/attachments` | 上传图片（`multipart/form-data`） | `voucher:write` |
+| DELETE | `/books/{id}/vouchers/{voucherID}/attachments/{attachmentID}` | 删除图片（204） | `voucher:write` |
 | GET | `/books/{id}/parallel-rules` | 平行记账规则 | 成员 |
 | POST | `/books/{id}/parallel-rules` | 新增规则 | `parallel:write` |
 | DELETE | `/books/{id}/parallel-rules/{ruleID}` | 删除规则 | `parallel:write` |
+
+### 凭证图片（附件）
+
+图片不存数据库，按 `附件目录/attachments/{账套}/{凭证}/` 存放，目录内 `index.json` 记录文件名、大小、上传人、时间。
+
+- 上传字段：`file`（必填，JPG / PNG / WebP）、`thumb`（可选，前端生成的 JPEG 缩略图）。
+- 服务端只按文件头判断类型，不认扩展名与客户端声明的 `Content-Type`；**不接受 SVG**。
+- 上限：单张 10MB（`YANGHE_FINANCE_STORAGE_MAX_FILE_MB`）、单张凭证 20 张（`YANGHE_FINANCE_STORAGE_MAX_FILES`）、单次请求体 12MB。
+- 已审核凭证或已结账期间返回 `409 conflict`。
+- 取图片必须带 `Authorization` 头（浏览器里不能用裸 `<img src>`，前端用 fetch + blob）。
+- 附件目录不可写时，上传返回 `503 attachment_unavailable`，读取接口仍返回空列表。
 
 ## 八、期末与报表
 

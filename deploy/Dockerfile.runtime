@@ -22,8 +22,12 @@ ARG BIN=deploy/.cache/yanghe-finance-amd64
 COPY ${BIN} /app/yanghe-finance
 COPY web/dist /app/web
 
+# 凭证图片目录：uid 10001 要能写，所以在这里建好并改属主。
+RUN mkdir -p /app/data/attachments && chown -R yanghe:yanghe /app/data
+
 ENV YANGHE_FINANCE_SERVER_ADDR=:8080 \
-    YANGHE_FINANCE_SERVER_STATIC_DIR=/app/web
+    YANGHE_FINANCE_SERVER_STATIC_DIR=/app/web \
+    YANGHE_FINANCE_STORAGE_DIR=/app/data/attachments
 
 USER yanghe
 EXPOSE 8080

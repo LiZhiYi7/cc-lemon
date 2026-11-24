@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 凭证录入 / 修改。平行记账账套按核算账簿分区录入，各区借贷各自平衡。
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { http } from '@/api/http'
 import type { Ledger, Voucher, VoucherLine } from '@/api/types'
@@ -10,6 +10,8 @@ import { fmtCents, fromCents, toCents, toChinese } from '@/utils/money'
 import { defaultDate, periodStr } from '@/utils/period'
 import AccountSelect from '@/components/AccountSelect.vue'
 import AuxSelect from '@/components/AuxSelect.vue'
+import AttachBar from '@/components/AttachBar.vue'
+import { useAttachQueue } from '@/stores/attachQueue'
 
 interface Row { summary: string; account_id?: number; debit: string; credit: string; aux: Record<number, number | undefined> }
 interface Section { ledger: Ledger; rows: Row[] }
@@ -23,6 +25,9 @@ const detail = book.detail!
 const id = ref(Number(route.params.voucherId) || 0)
 const loaded = ref<Voucher | null>(null)
 const saving = ref(false)
+const attachRef = ref<InstanceType<typeof AttachBar> | null>(null)
+// 待上传的图片放在模块级队列里：保存后路由会 replace 一次，本组件会被重建。
+const attachQueue = useAttachQueue()
 const head = reactive({
   word: detail.voucher_words.find((w) => w.is_default)?.word ?? detail.voucher_words[0]?.word ?? '',
   number: 0,
@@ -73,6 +78,21 @@ onMounted(async () => {
   window.addEventListener('keydown', hotkey)
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', hotkey))
+
+// 有图还没传上去就离开页面时提示一次：这些图只存在浏览器里，走了就没了。
+onBeforeRouteLeave(async () => {
+  if (!attachQueue.value.length) return true
+  try {
+    await ElMessageBox.confirm(`还有 ${attachQueue.value.length} 张图片没上传，确定离开？`, '图片未上传', {
+      type: 'warning',
+      confirmButtonText: '仍然离开',
+      cancelButtonText: '留下',
+    })
+    return true
+  } catch {
+    return false
+  }
+})
 
 function hotkey(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -178,7 +198,16 @@ async function save(andNew: boolean) {
     const v = id.value
       ? await http.put<Voucher>(`${book.base}/vouchers/${id.value}`, body)
       : await http.post<Voucher>(`${book.base}/vouchers`, body)
+    // 凭证已落库，再把暂存的图片逐张上传；单张失败不影响凭证本身。
+    let failed = 0
+    if (attachRef.value) failed = (await attachRef.value.flush(v.id)).failed
     ElMessage.success(`凭证 ${v.word}-${v.number} 已保存`)
+    if (failed) {
+      ElMessage.warning({
+        message: `凭证已保存，${failed} 张图片未上传。请在附件区点「重试上传」，否则它们只在这台电脑上。`,
+        duration: 10000,
+      })
+    }
     v.warnings?.forEach((w) => ElMessage.warning({ message: w, duration: 6000 }))
     if (andNew) {
       // 连续录入：保留日期与凭证字
@@ -302,6 +331,8 @@ const print = () => window.print()
           </tfoot>
         </table>
       </div>
+
+      <AttachBar ref="attachRef" :base="book.base" :voucher-id="id" :readonly="readonly" :max="20" />
 
       <div class="foot muted">
         <span>制单人：{{ loaded?.created_by_name || '' }}</span>

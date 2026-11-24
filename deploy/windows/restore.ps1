@@ -6,6 +6,7 @@
 param(
     [ValidateSet('demo', 'prod')][string]$Mode = 'prod',
     [Parameter(Mandatory)][string]$File,
+    [string]$AttachmentsZip = '',
     [switch]$Force
 )
 
@@ -89,6 +90,22 @@ try {
         Write-Fail '导入备份失败，数据库中没有表。'
         Show-NativeOutput -Result $r -Lines 15
         throw 'pg_restore 失败'
+    }
+
+    # 凭证图片不在 dump 里，需要单独指定图片压缩包（backups\yanghe-finance-files-*.zip）
+    if ($AttachmentsZip) {
+        if (-not (Test-Path -LiteralPath $AttachmentsZip)) {
+            Write-Warn2 ('找不到图片包：{0}，本次未恢复图片。' -f $AttachmentsZip)
+        } else {
+            Write-Step '恢复凭证图片'
+            if (-not (Test-Path -LiteralPath $Paths.Attachments)) {
+                New-Item -ItemType Directory -Path $Paths.Attachments -Force | Out-Null
+            }
+            Expand-Archive -LiteralPath $AttachmentsZip -DestinationPath $Paths.Attachments -Force
+            Write-Ok '图片附件已恢复'
+        }
+    } else {
+        Write-Warn2 '未指定 -AttachmentsZip，本次只恢复数据库；凭证上的图片需要另外解压到 attachments 目录。'
     }
 
     if ($startedHere) { Stop-PgCluster -Paths $Paths }

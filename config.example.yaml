@@ -15,3 +15,8 @@ standards:
   # 只允许使用的准则编码；留空=全部。给只做行政事业单位的客户时填：
   #   allow: ["gov_accounting"]
   allow: []                     # 额外的会计准则模板目录（*.yaml），同 code 覆盖内置模板
+
+storage:
+  dir: "data/attachments"       # 凭证图片目录；留空=关闭图片功能
+  max_file_mb: 10               # 单张图片上限（MB）
+  max_files: 20                 # 单张凭证最多几张图片

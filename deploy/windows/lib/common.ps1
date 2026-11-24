@@ -90,6 +90,8 @@ function Get-YanghePaths {
         PgPass    = Join-Path $dataDir 'pgpass.conf'
         RunDir    = Join-Path (Join-Path $Root 'run') $Mode
         PidFile   = Join-Path (Join-Path $Root 'run') ($Mode + '\yanghe-finance.pid')
+        # 凭证图片：与 data/logs/run 同级，按模式分开，打包与备份都按这个路径找。
+        Attachments = Join-Path (Join-Path $Root 'attachments') $Mode
         # 会话标记：存在的含义是"这个模式由 start.ps1 托管，退出时该由它停数据库"。
         # 外部脚本（停止/恢复）先删掉它，再杀应用，避免 start.ps1 的清理把手里的数据库停掉。
         SessionFile = Join-Path (Join-Path $Root 'run') ($Mode + '\session')
@@ -100,7 +102,7 @@ function Get-YanghePaths {
 function Initialize-YangheDirs {
     param([Parameter(Mandatory)]$Paths)
 
-    foreach ($d in @($Paths.DataDir, $Paths.LogDir, $Paths.RunDir, (Join-Path $Paths.Root 'secrets'), $Paths.BackupDir)) {
+    foreach ($d in @($Paths.DataDir, $Paths.LogDir, $Paths.RunDir, $Paths.Attachments, (Join-Path $Paths.Root 'secrets'), $Paths.BackupDir)) {
         if (-not (Test-Path -LiteralPath $d)) {
             New-Item -ItemType Directory -Path $d -Force | Out-Null
         }

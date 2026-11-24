@@ -40,8 +40,12 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${HTTP_PORT:-8080}:8080"
-    # volumes:
-    #   - ./standards:/app/standards:ro
+    volumes:
+      # 凭证图片。注意：宿主机目录首次创建时属主是 root，
+      # NAS 上需要 `chown -R 10001:10001 ./data/attachments`，否则上传会报 503。
+      - ${DATA_DIR:-./data}/attachments:/app/data/attachments
+      # 可选：挂载自定义会计准则模板目录后启用
+      # - ./standards:/app/standards:ro
 
   # 每天一次 pg_dump 到 NAS 目录，保留最近 N 天。
   # 建议再用 NAS 自带的快照 / 异地同步保护备份目录。
@@ -57,5 +61,6 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ${BACKUP_DIR:-./backups}:/backups
+      - ${DATA_DIR:-./data}/attachments:/attachments:ro
       - ./backup.sh:/backup.sh:ro
     entrypoint: ["/bin/sh", "/backup.sh"]
