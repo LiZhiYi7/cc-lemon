@@ -137,5 +137,5 @@ async function reopen() {
 .rule { display: flex; flex-direction: column; gap: 8px; }
 .rule-name { font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: center; }
 .amount { min-height: 24px; }
-.check { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--lemon-border); }
+.check { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--yanghe-border); }
 </style>

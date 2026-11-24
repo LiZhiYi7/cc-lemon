@@ -4,15 +4,15 @@
 //   node scripts/seed-demo.mjs
 //
 // 环境变量：
-//   LEMON_URL       服务地址，默认 http://localhost:8080
-//   LEMON_ADMIN     管理员用户名，默认 admin
-//   LEMON_PASSWORD  管理员密码，默认 lemon-demo（系统未初始化时会用它创建管理员）
+//   YANGHE_FINANCE_URL       服务地址，默认 http://localhost:8080
+//   YANGHE_FINANCE_ADMIN     管理员用户名，默认 admin
+//   YANGHE_FINANCE_PASSWORD  管理员密码，默认 yanghe-demo（系统未初始化时会用它创建管理员）
 //
 // 可重复执行：同名账套已存在时跳过。只应对演示/测试环境使用。
 
-const base = (process.env.LEMON_URL || 'http://localhost:8080').replace(/\/$/, '') + '/api/v1'
-const username = process.env.LEMON_ADMIN || 'admin'
-const password = process.env.LEMON_PASSWORD || 'lemon-demo'
+const base = (process.env.YANGHE_FINANCE_URL || 'http://localhost:8080').replace(/\/$/, '') + '/api/v1'
+const username = process.env.YANGHE_FINANCE_ADMIN || 'admin'
+const password = process.env.YANGHE_FINANCE_PASSWORD || 'yanghe-demo'
 let token = ''
 
 async function api(method, path, body) {

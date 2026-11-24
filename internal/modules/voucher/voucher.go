@@ -14,14 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/audit"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/auth"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/account"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/auxiliary"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/audit"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/auth"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 const (

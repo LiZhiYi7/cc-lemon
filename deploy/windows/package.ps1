@@ -1,5 +1,5 @@
-﻿# 柠檬账 · 一键打包
-# 产物：build\release\lemon-win-x64-<版本>.zip + .sha256
+﻿# 阳和财务系统 · 一键打包
+# 产物：build\release\yanghe-finance-win-x64-<版本>.zip + .sha256
 #
 # 用法：
 #   powershell -ExecutionPolicy Bypass -File deploy\windows\package.ps1 -Version 1.0.0
@@ -19,7 +19,7 @@ $repo = Split-Path (Split-Path $winDir -Parent) -Parent
 $buildDir = Join-Path $repo 'build'
 $stageRoot = Join-Path $buildDir 'stage'
 $releaseDir = Join-Path $buildDir 'release'
-$folderName = 'lemon-' + $Version
+$folderName = 'yanghe-finance-' + $Version
 $stage = Join-Path $stageRoot $folderName
 
 function Write-Head {
@@ -86,7 +86,7 @@ if (-not $PgZip) { $PgZip = Join-Path $winDir 'vendor\postgresql-16.13-1-windows
 
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor DarkCyan
-Write-Host ('  柠檬账 · 打包 {0}' -f $Version) -ForegroundColor White
+Write-Host ('  阳和财务系统 · 打包 {0}' -f $Version) -ForegroundColor White
 Write-Host '============================================================' -ForegroundColor DarkCyan
 
 # ---------------------------------------------------------------- 前置检查
@@ -141,18 +141,18 @@ Write-Done ('暂存目录：{0}' -f $stage)
 
 Write-Head '编译后端（windows/amd64）'
 
-$exePath = Join-Path $stage 'lemon.exe'
+$exePath = Join-Path $stage 'yanghe-finance.exe'
 $env:CGO_ENABLED = '0'
 $env:GOOS = 'windows'
 $env:GOARCH = 'amd64'
 Push-Location $repo
 try {
-    & go build -trimpath -ldflags ('-s -w -X main.version={0}' -f $Version) -o $exePath ./cmd/lemon
+    & go build -trimpath -ldflags ('-s -w -X main.version={0}' -f $Version) -o $exePath ./cmd/yanghe-finance
     if ($LASTEXITCODE -ne 0) { Fail 'go build 失败' }
 } finally {
     Pop-Location
 }
-Write-Done ('lemon.exe {0:N1} MB' -f ((Get-Item -LiteralPath $exePath).Length / 1MB))
+Write-Done ('yanghe-finance.exe {0:N1} MB' -f ((Get-Item -LiteralPath $exePath).Length / 1MB))
 
 # ---------------------------------------------------------------- 组装
 
@@ -256,7 +256,7 @@ try {
 } catch { }
 
 $versionText = @(
-    '柠檬账（cc-lemon）'
+    '阳和财务系统（yanghe-finance）'
     ('版本      : {0}' -f $Version)
     ('构建时间  : {0}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
     ('提交      : {0}' -f $gitCommit)
@@ -308,7 +308,7 @@ if ($secretHits.Count -gt 0) {
     foreach ($h in $secretHits) { $problems.Add(('疑似明文密钥：{0}' -f $h)) }
 }
 
-if (-not (Test-Path -LiteralPath (Join-Path $stage 'lemon.exe'))) { $problems.Add('lemon.exe 缺失') }
+if (-not (Test-Path -LiteralPath (Join-Path $stage 'yanghe-finance.exe'))) { $problems.Add('yanghe-finance.exe 缺失') }
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'web\index.html'))) { $problems.Add('web\index.html 缺失') }
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'web\assets'))) {
     $problems.Add('web\assets 缺失（客户打开会白屏）')
@@ -340,7 +340,7 @@ Write-Done '脚本编码正确（UTF-8 BOM）'
 
 Write-Head '生成压缩包'
 
-$zipPath = Join-Path $releaseDir ('lemon-win-x64-' + $Version + '.zip')
+$zipPath = Join-Path $releaseDir ('yanghe-finance-win-x64-' + $Version + '.zip')
 if (Test-Path -LiteralPath $zipPath) {
     # 直接走 .NET：Remove-Item 会被外部的批量删除保护拦截
     [System.IO.File]::Delete($zipPath)
@@ -363,7 +363,7 @@ $entries = (& tar.exe -tf $zipPath | Measure-Object).Count
 Write-Done ('压缩包内条目 {0} 个' -f $entries)
 
 # 只保留最近两个版本
-$old = Get-ChildItem -LiteralPath $releaseDir -Filter 'lemon-win-x64-*.zip' -File |
+$old = Get-ChildItem -LiteralPath $releaseDir -Filter 'yanghe-finance-win-x64-*.zip' -File |
     Sort-Object LastWriteTime -Descending | Select-Object -Skip 2
 foreach ($f in $old) {
     try { [System.IO.File]::Delete($f.FullName) } catch { }

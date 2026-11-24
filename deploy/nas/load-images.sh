@@ -1,5 +1,5 @@
 #!/bin/sh
-# 柠檬账 · 导入离线镜像
+# 阳和财务系统 · 导入离线镜像
 # 与 docker-compose.offline.yml 放在同一层目录，镜像在 images/ 下。
 
 set -eu
@@ -66,7 +66,7 @@ check_arch() {
 echo
 echo "核对镜像架构…"
 bad=0
-for img in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^cc-lemon:|^postgres:16-alpine' || true); do
+for img in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^yanghe-finance:|^postgres:16-alpine' || true); do
   check_arch "$img" || bad=1
 done
 
@@ -77,7 +77,7 @@ echo "架构核对通过（$want）"
 
 echo
 echo "已导入 $loaded 个镜像："
-docker images | grep -E 'cc-lemon|postgres' || true
+docker images | grep -E 'yanghe-finance|postgres' || true
 echo
 echo "下一步："
 echo "  1. cp .env.example .env  并修改 DB_PASSWORD / APP_IMAGE"

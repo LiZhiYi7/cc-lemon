@@ -1,4 +1,4 @@
-﻿# 柠檬账 · 立即备份
+﻿# 阳和财务系统 · 立即备份
 # 用法：backup.ps1 [-Mode prod] [-KeepDays 30]
 # 备份为 pg_dump 自定义格式（.dump），先写 .partial 再改名，避免半截文件被误认。
 
@@ -11,17 +11,17 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
-if ($env:LEMON_ROOT) { $Root = $env:LEMON_ROOT }
+if ($env:YANGHE_FINANCE_ROOT) { $Root = $env:YANGHE_FINANCE_ROOT }
 
 . (Join-Path $PSScriptRoot 'lib\common.ps1')
 . (Join-Path $PSScriptRoot 'lib\pg.ps1')
 
-$Paths = Get-LemonPaths -Root $Root -Mode $Mode
+$Paths = Get-YanghePaths -Root $Root -Mode $Mode
 
 try {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkCyan
-    Write-Host ('  柠檬账 · 备份数据（{0}）' -f $Paths.Mode.Label) -ForegroundColor White
+    Write-Host ('  阳和财务系统 · 备份数据（{0}）' -f $Paths.Mode.Label) -ForegroundColor White
     Write-Host '============================================================' -ForegroundColor DarkCyan
 
     $password = Get-ModePassword -Paths $Paths
@@ -38,7 +38,7 @@ try {
         $startedHere = $true
     }
 
-    $result = Backup-LemonDatabase -Paths $Paths -Password $password -KeepDays $KeepDays
+    $result = Backup-YangheDatabase -Paths $Paths -Password $password -KeepDays $KeepDays
 
     if ($startedHere) {
         Stop-PgCluster -Paths $Paths

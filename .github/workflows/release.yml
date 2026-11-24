@@ -67,8 +67,8 @@ jobs:
           for arch in amd64 arm64; do
             echo "== linux/$arch =="
             CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
-              go build -trimpath -ldflags="-s -w" -o "deploy/.cache/lemon-$arch" ./cmd/lemon
-            ls -lh "deploy/.cache/lemon-$arch"
+              go build -trimpath -ldflags="-s -w" -o "deploy/.cache/yanghe-finance-$arch" ./cmd/yanghe-finance
+            ls -lh "deploy/.cache/yanghe-finance-$arch"
           done
 
       - name: 安装 QEMU
@@ -93,8 +93,8 @@ jobs:
             docker buildx build \
               --platform "linux/$arch" \
               -f deploy/Dockerfile.runtime \
-              --build-arg "BIN=deploy/.cache/lemon-$arch" \
-              -t "cc-lemon:$VERSION-$arch" \
+              --build-arg "BIN=deploy/.cache/yanghe-finance-$arch" \
+              -t "yanghe-finance:$VERSION-$arch" \
               --output "type=docker,dest=dist/app-$arch.tar" .
 
             echo "== 导出 postgres（$arch）=="
@@ -108,7 +108,7 @@ jobs:
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
           for arch in amd64 arm64; do
-            NAME="lemon-nas-$arch-$VERSION"
+            NAME="yanghe-finance-nas-$arch-$VERSION"
             rm -rf "dist/$NAME"
             mkdir -p "dist/$NAME/images" "dist/$NAME/nas"
 
@@ -123,7 +123,7 @@ jobs:
             mv "dist/postgres-$arch.tar" "dist/$NAME/images/postgres-16-alpine-$arch.tar"
 
             {
-              echo "柠檬账 NAS 离线包"
+              echo "阳和财务系统 NAS 离线包"
               echo "版本   : ${VERSION}"
               echo "架构   : ${arch}"
               echo "构建   : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -138,27 +138,27 @@ jobs:
           done
 
           cd dist
-          for f in lemon-nas-*.tar.gz; do
+          for f in yanghe-finance-nas-*.tar.gz; do
             sha256sum "$f" > "$f.sha256"
           done
-          sha256sum lemon-nas-*.tar.gz > SHA256SUMS.txt
+          sha256sum yanghe-finance-nas-*.tar.gz > SHA256SUMS.txt
           cat SHA256SUMS.txt
           ls -lh *.tar.gz
 
       - name: 上传 amd64 产物
         uses: actions/upload-artifact@v4
         with:
-          name: lemon-nas-amd64-${{ steps.meta.outputs.version }}
+          name: yanghe-finance-nas-amd64-${{ steps.meta.outputs.version }}
           path: |
-            dist/lemon-nas-amd64-*.tar.gz
-            dist/lemon-nas-amd64-*.tar.gz.sha256
+            dist/yanghe-finance-nas-amd64-*.tar.gz
+            dist/yanghe-finance-nas-amd64-*.tar.gz.sha256
           retention-days: 30
 
       - name: 上传 arm64 产物
         uses: actions/upload-artifact@v4
         with:
-          name: lemon-nas-arm64-${{ steps.meta.outputs.version }}
+          name: yanghe-finance-nas-arm64-${{ steps.meta.outputs.version }}
           path: |
-            dist/lemon-nas-arm64-*.tar.gz
-            dist/lemon-nas-arm64-*.tar.gz.sha256
+            dist/yanghe-finance-nas-arm64-*.tar.gz
+            dist/yanghe-finance-nas-arm64-*.tar.gz.sha256
           retention-days: 30

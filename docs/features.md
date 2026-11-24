@@ -1,4 +1,4 @@
-# 柠檬账 功能说明
+# 阳和财务系统 功能说明
 
 本文面向使用者，说明系统目前已有的功能、操作位置和使用规则。技术架构与扩展方式见 [architecture.md](architecture.md)，部署见 [README](../README.md)。
 

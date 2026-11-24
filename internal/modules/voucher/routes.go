@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 func (s *Service) Routes(r chi.Router) {

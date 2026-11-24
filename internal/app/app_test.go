@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lizhiyi7/cc-lemon/internal/app"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/config"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/app"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/config"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
 )
 
 // 端到端测试：经真实路由与 PostgreSQL 走通核心账务流程。
-// 需设置 LEMON_TEST_DSN 指向一个可清空的测试库，否则跳过。
+// 需设置 YANGHE_FINANCE_TEST_DSN 指向一个可清空的测试库，否则跳过。
 
 type client struct {
 	t     *testing.T
@@ -26,9 +26,9 @@ type client struct {
 }
 
 func newClient(t *testing.T) *client {
-	dsn := os.Getenv("LEMON_TEST_DSN")
+	dsn := os.Getenv("YANGHE_FINANCE_TEST_DSN")
 	if dsn == "" {
-		t.Skip("未设置 LEMON_TEST_DSN")
+		t.Skip("未设置 YANGHE_FINANCE_TEST_DSN")
 	}
 	ctx := context.Background()
 	d, err := db.Open(ctx, dsn, 4)

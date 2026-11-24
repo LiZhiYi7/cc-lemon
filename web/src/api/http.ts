@@ -6,10 +6,30 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_KEY = 'lemon.token'
+const TOKEN_KEY = 'yanghe-finance.token'
+// 旧版本（柠檬账）用的 key。升级后先把它搬过来，避免所有人被强制退出登录。
+const LEGACY_TOKEN_KEY = 'lemon.token'
+
 export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY) || '',
-  set: (t: string) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY)),
+  get: () => {
+    const current = localStorage.getItem(TOKEN_KEY)
+    if (current) return current
+    const legacy = localStorage.getItem(LEGACY_TOKEN_KEY)
+    if (legacy) {
+      localStorage.setItem(TOKEN_KEY, legacy)
+      localStorage.removeItem(LEGACY_TOKEN_KEY)
+      return legacy
+    }
+    return ''
+  },
+  set: (t: string) => {
+    if (t) {
+      localStorage.setItem(TOKEN_KEY, t)
+      return
+    }
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(LEGACY_TOKEN_KEY)
+  },
 }
 
 let onUnauthorized: () => void = () => {}

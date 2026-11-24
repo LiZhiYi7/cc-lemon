@@ -1,4 +1,4 @@
-﻿# 柠檬账 · 启动入口
+﻿# 阳和财务系统 · 启动入口
 # 用法：powershell -ExecutionPolicy Bypass -File start.ps1 -Mode demo|prod
 #       由根目录的 "1-离线单机运行.bat" / "2-正式使用.bat" 调用，一般不需要手工执行。
 
@@ -11,28 +11,28 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
-if ($env:LEMON_ROOT) { $Root = $env:LEMON_ROOT }
+if ($env:YANGHE_FINANCE_ROOT) { $Root = $env:YANGHE_FINANCE_ROOT }
 
 . (Join-Path $PSScriptRoot 'lib\common.ps1')
 . (Join-Path $PSScriptRoot 'lib\pg.ps1')
-. (Join-Path $PSScriptRoot 'lib\lemon.ps1')
+. (Join-Path $PSScriptRoot 'lib\app.ps1')
 . (Join-Path $PSScriptRoot 'firewall.ps1')
 
-$Paths = Get-LemonPaths -Root $Root -Mode $Mode
+$Paths = Get-YanghePaths -Root $Root -Mode $Mode
 $Endpoint = Get-AppEndpoint -Paths $Paths
 
 try {
-    $Host.UI.RawUI.WindowTitle = ('柠檬账 · {0}' -f $Paths.Mode.Label)
+    $Host.UI.RawUI.WindowTitle = ('阳和财务系统 · {0}' -f $Paths.Mode.Label)
 
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkCyan
-    Write-Host ('  柠檬账 · {0}' -f $Paths.Mode.Label) -ForegroundColor White
+    Write-Host ('  阳和财务系统 · {0}' -f $Paths.Mode.Label) -ForegroundColor White
     Write-Host '============================================================' -ForegroundColor DarkCyan
 
-    Initialize-LemonDirs -Paths $Paths
+    Initialize-YangheDirs -Paths $Paths
     Clear-StartError -Paths $Paths
 
-    if (-not (Test-LemonPreflight -Paths $Paths)) {
+    if (-not (Test-YanghePreflight -Paths $Paths)) {
         Write-Host ''
         Write-Fail '环境检查未通过，已停止启动。'
         Set-StartError -Paths $Paths -Message (@(
@@ -43,12 +43,12 @@ try {
         exit 1
     }
 
-    $runningPid = Get-LemonPid -Paths $Paths
+    $runningPid = Get-YanghePid -Paths $Paths
     if ($runningPid -gt 0) {
         Write-Host ''
         Write-Ok ('服务已经在运行（PID {0}）' -f $runningPid)
         Write-Info ('访问地址：{0}' -f $Endpoint.LocalUrl)
-        if (-not $NoBrowser) { Open-LemonBrowser -Endpoint $Endpoint | Out-Null }
+        if (-not $NoBrowser) { Open-YangheBrowser -Endpoint $Endpoint | Out-Null }
         Write-Host ''
         Write-Info '如需停止，请双击「3-停止运行.bat」。'
         exit 0
@@ -77,13 +77,13 @@ try {
 
     Initialize-PgCluster -Paths $Paths -Password $password
     Start-PgCluster -Paths $Paths
-    Ensure-LemonDatabase -Paths $Paths -Password $password
+    Ensure-YangheDatabase -Paths $Paths -Password $password
 
     if ($Mode -eq 'prod') {
         Assert-FirewallRule -AppPort $Endpoint.Port
     }
 
-    $app = Start-LemonApp -Paths $Paths -Endpoint $Endpoint -Password $password
+    $app = Start-YangheApp -Paths $Paths -Endpoint $Endpoint -Password $password
 
     Write-Step '等待服务就绪'
     if (-not (Wait-AppReady -Endpoint $Endpoint -Process $app.Process -TimeoutSeconds 120)) {
@@ -127,7 +127,7 @@ try {
     Write-Host '  按 Ctrl+C 或关闭本窗口即可停止服务。' -ForegroundColor Yellow
     Write-Host ''
 
-    if (-not $NoBrowser) { Open-LemonBrowser -Endpoint $Endpoint | Out-Null }
+    if (-not $NoBrowser) { Open-YangheBrowser -Endpoint $Endpoint | Out-Null }
 
     # 跟随应用日志输出，直到进程退出或用户中断
     $seen = 0
@@ -168,7 +168,7 @@ try {
     # 无论正常退出还是 Ctrl+C，都要把应用和数据库停干净。
     # 但如果这次退出是外部脚本（停止/恢复）触发的，会话标记已被撤销，
     # 数据库由其接管，这里就不要再停一次。
-    try { Stop-LemonApp -Paths $Paths | Out-Null } catch { }
+    try { Stop-YangheApp -Paths $Paths | Out-Null } catch { }
     if (Test-Path -LiteralPath $Paths.SessionFile) {
         try { Stop-PgCluster -Paths $Paths } catch { }
     }

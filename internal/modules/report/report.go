@@ -12,14 +12,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/shopspring/decimal"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/ledger"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/standard"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/audit"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/auxiliary"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/ledger"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/standard"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/audit"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 type Dec = decimal.Decimal

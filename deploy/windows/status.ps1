@@ -1,4 +1,4 @@
-﻿# 柠檬账 · 运行状态
+﻿# 阳和财务系统 · 运行状态
 # 用法：status.ps1
 
 [CmdletBinding()]
@@ -7,7 +7,7 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
-if ($env:LEMON_ROOT) { $Root = $env:LEMON_ROOT }
+if ($env:YANGHE_FINANCE_ROOT) { $Root = $env:YANGHE_FINANCE_ROOT }
 
 . (Join-Path $PSScriptRoot 'lib\common.ps1')
 . (Join-Path $PSScriptRoot 'lib\pg.ps1')
@@ -30,16 +30,16 @@ function Get-DirSizeMb {
 try {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkCyan
-    Write-Host '  柠檬账 · 运行状态' -ForegroundColor White
+    Write-Host '  阳和财务系统 · 运行状态' -ForegroundColor White
     Write-Host '============================================================' -ForegroundColor DarkCyan
     Write-Host ('  目录：{0}' -f $Root) -ForegroundColor Gray
     Write-Host ''
 
     foreach ($m in @('demo', 'prod')) {
-        $Paths = Get-LemonPaths -Root $Root -Mode $m
+        $Paths = Get-YanghePaths -Root $Root -Mode $m
         $endpoint = Get-AppEndpoint -Paths $Paths
 
-        $appPid = Get-LemonPid -Paths $Paths
+        $appPid = Get-YanghePid -Paths $Paths
         $pgRunning = Test-PgRunning -Paths $Paths
 
         $health = '-'
@@ -65,7 +65,7 @@ try {
             if ($lan.Count -gt 0) {
                 Write-Host ('  局域网     {0}' -f (($lan | ForEach-Object { 'http://{0}:{1}' -f $_, $endpoint.Port }) -join '  '))
             }
-            $backs = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'lemon-*.dump' -ErrorAction SilentlyContinue |
+            $backs = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'yanghe-finance-*.dump' -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTime -Descending | Select-Object -First 3)
             if ($backs.Count -gt 0) {
                 Write-Host '  最近备份：'

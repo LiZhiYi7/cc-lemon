@@ -14,12 +14,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"gopkg.in/yaml.v3"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/standard"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/audit"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/auth"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/standard"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/audit"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/auth"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 // 账套级配置类别。

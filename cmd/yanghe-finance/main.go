@@ -1,4 +1,4 @@
-// 柠檬账 —— 局域网财务系统服务端入口。
+// 阳和财务系统 —— 局域网财务系统服务端入口。
 package main
 
 import (
@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lizhiyi7/cc-lemon/internal/app"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/config"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/app"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/config"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
 )
 
 // version 由构建时注入：go build -ldflags "-X main.version=1.0.0"

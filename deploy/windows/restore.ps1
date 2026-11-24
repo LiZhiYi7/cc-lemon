@@ -1,5 +1,5 @@
-﻿# 柠檬账 · 从备份恢复
-# 用法：restore.ps1 -Mode prod -File "D:\...\lemon-20260101-020000.dump"
+﻿# 阳和财务系统 · 从备份恢复
+# 用法：restore.ps1 -Mode prod -File "D:\...\yanghe-finance-20260101-020000.dump"
 # 注意：会删除当前业务数据库后重建，恢复前会要求输入 YES 确认。
 
 [CmdletBinding()]
@@ -12,18 +12,18 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
-if ($env:LEMON_ROOT) { $Root = $env:LEMON_ROOT }
+if ($env:YANGHE_FINANCE_ROOT) { $Root = $env:YANGHE_FINANCE_ROOT }
 
 . (Join-Path $PSScriptRoot 'lib\common.ps1')
 . (Join-Path $PSScriptRoot 'lib\pg.ps1')
-. (Join-Path $PSScriptRoot 'lib\lemon.ps1')
+. (Join-Path $PSScriptRoot 'lib\app.ps1')
 
-$Paths = Get-LemonPaths -Root $Root -Mode $Mode
+$Paths = Get-YanghePaths -Root $Root -Mode $Mode
 
 try {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkCyan
-    Write-Host ('  柠檬账 · 恢复数据（{0}）' -f $Paths.Mode.Label) -ForegroundColor White
+    Write-Host ('  阳和财务系统 · 恢复数据（{0}）' -f $Paths.Mode.Label) -ForegroundColor White
     Write-Host '============================================================' -ForegroundColor DarkCyan
 
     if (-not (Test-Path -LiteralPath $File)) {
@@ -47,7 +47,7 @@ try {
         }
     }
 
-    Stop-LemonApp -Paths $Paths -External | Out-Null
+    Stop-YangheApp -Paths $Paths -External | Out-Null
 
     $startedHere = $false
     if (-not (Test-PgRunning -Paths $Paths)) {

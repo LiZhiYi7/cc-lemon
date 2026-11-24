@@ -1,20 +1,20 @@
 # NAS 部署：数据库 + 应用 + 定时备份。
 # 用法（在 deploy/ 目录）：cp .env.example .env && 修改密码 && docker compose up -d --build
-name: cc-lemon
+name: yanghe-finance
 
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: lemon
-      POSTGRES_USER: lemon
+      POSTGRES_DB: yanghe_finance
+      POSTGRES_USER: yanghe_finance
       POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ${DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lemon -d lemon"]
+      test: ["CMD-SHELL", "pg_isready -U yanghe_finance -d yanghe_finance"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -27,16 +27,16 @@ services:
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
-    image: cc-lemon:latest
+    image: yanghe-finance:latest
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
     environment:
-      LEMON_DATABASE_DSN: postgres://lemon:${DB_PASSWORD}@db:5432/lemon?sslmode=disable
-      LEMON_AUTH_TOKEN_TTL: ${TOKEN_TTL:-12h}
+      YANGHE_FINANCE_DATABASE_DSN: postgres://yanghe_finance:${DB_PASSWORD}@db:5432/yanghe_finance?sslmode=disable
+      YANGHE_FINANCE_AUTH_TOKEN_TTL: ${TOKEN_TTL:-12h}
       # 可选：挂载自定义会计准则模板目录后启用
-      # LEMON_STANDARDS_DIR: /app/standards
+      # YANGHE_FINANCE_STANDARDS_DIR: /app/standards
       TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${HTTP_PORT:-8080}:8080"

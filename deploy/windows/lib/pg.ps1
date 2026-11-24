@@ -1,4 +1,4 @@
-﻿# 柠檬账 · 便携 PostgreSQL 生命周期封装
+﻿# 阳和财务系统 · 便携 PostgreSQL 生命周期封装
 # 依赖 common.ps1 已点引用。
 #
 # 设计要点：
@@ -118,15 +118,19 @@ function Set-PgConfig {
     $conf = Join-Path $Paths.PgData 'postgresql.conf'
     if (-not (Test-Path -LiteralPath $conf)) { throw "找不到配置文件：$conf" }
 
-    $begin = '# ==== lemon ===='
-    $end = '# ==== lemon end ===='
+    $begin = '# ==== yanghe ===='
+    $end = '# ==== yanghe end ===='
+    # 旧版本写的是 lemon 标记。只认新标记会把旧托管块留在文件里，
+    # 结果 postgresql.conf 出现两份 port/listen_addresses（PG 取最后一次，排障时极易误判）。
+    $legacyBegin = '# ==== lemon ===='
+    $legacyEnd = '# ==== lemon end ===='
 
     $original = Get-Content -LiteralPath $conf -Encoding UTF8
     $kept = New-Object System.Collections.Generic.List[string]
     $skip = $false
     foreach ($line in $original) {
-        if ($line -eq $begin) { $skip = $true; continue }
-        if ($line -eq $end) { $skip = $false; continue }
+        if ($line -eq $begin -or $line -eq $legacyBegin) { $skip = $true; continue }
+        if ($line -eq $end -or $line -eq $legacyEnd) { $skip = $false; continue }
         if (-not $skip) { [void]$kept.Add($line) }
     }
 
@@ -292,12 +296,108 @@ function Invoke-Psql {
     )
 }
 
-function Ensure-LemonDatabase {
+function Update-LegacyDatabaseNames {
+    # 1.x 及更早版本使用 lemon 作为库名与超级用户名。升级到本版本后
+    # Ensure-YangheDatabase 会认为"新库不存在"从而 createdb 出一个空库，
+    # 表现为"升级后数据全没了"。这里先用旧身份原地改名（OID 不变，
+    # 属主、序列、权限全部保留），改名后旧名不再存在，后续逻辑自然走"已存在"分支。
     param(
         [Parameter(Mandatory)]$Paths,
         [Parameter(Mandatory)][string]$Password
     )
 
+    $legacyName = 'lemon'
+    if ($script:DbName -eq $legacyName) { return }
+    if (-not (Test-Path -LiteralPath $Paths.PgData)) { return }
+
+    $psql = Get-PgExe -Paths $Paths -Name 'psql'
+    $port = $Paths.Mode.PgPort
+    $probeSql = ("select (select count(*) from pg_database where datname='{0}')," +
+        "(select count(*) from pg_database where datname='{1}')," +
+        "(select count(*) from pg_roles where rolname='{0}')," +
+        "(select count(*) from pg_roles where rolname='{1}')") -f $legacyName, $script:DbName
+
+    # 以旧用户名连一次；旧角色已改名时这里必然失败，用新用户名再探一次。
+    Set-Content -LiteralPath $Paths.PgPass -Value ('127.0.0.1:{0}:*:{1}:{2}' -f $port, $legacyName, $Password) -NoNewline -Encoding ascii
+    $env:PGPASSFILE = $Paths.PgPass
+    $loginName = $legacyName
+
+    $probe = Invoke-Native -FilePath $psql -TimeoutMs 30000 -Arguments @(
+        '-h', '127.0.0.1', '-p', $port, '-U', $loginName, '-d', 'postgres', '-tAc', $probeSql
+    )
+    $text = ([string]$probe.Output).Trim()
+
+    if ($text -notmatch '^\d+\|\d+\|\d+\|\d+$') {
+        Set-Content -LiteralPath $Paths.PgPass -Value ('127.0.0.1:{0}:*:{1}:{2}' -f $port, $script:DbUser, $Password) -NoNewline -Encoding ascii
+        $env:PGPASSFILE = $Paths.PgPass
+        $loginName = $script:DbUser
+        $probe = Invoke-Native -FilePath $psql -TimeoutMs 30000 -Arguments @(
+            '-h', '127.0.0.1', '-p', $port, '-U', $loginName, '-d', 'postgres', '-tAc', $probeSql
+        )
+        $text = ([string]$probe.Output).Trim()
+        if ($text -notmatch '^\d+\|\d+\|\d+\|\d+$') {
+            # 全新安装，或数据库尚未初始化：交给后面的正常流程。
+            Write-PgPassFile -Paths $Paths -Password $Password
+            return
+        }
+    }
+
+    $parts = $text.Split('|')
+    $oldDb = [int]$parts[0]
+    $newDb = [int]$parts[1]
+    $oldRole = [int]$parts[2]
+    $newRole = [int]$parts[3]
+
+    if ($newDb -eq 1 -and $oldDb -eq 0) {
+        Write-PgPassFile -Paths $Paths -Password $Password
+        return
+    }
+
+    $statements = New-Object System.Collections.Generic.List[string]
+    if ($oldDb -eq 1 -and $newDb -eq 0) { [void]$statements.Add(('ALTER DATABASE {0} RENAME TO {1}' -f $legacyName, $script:DbName)) }
+    if ($oldRole -eq 1 -and $newRole -eq 0) { [void]$statements.Add(('ALTER ROLE {0} RENAME TO {1}' -f $legacyName, $script:DbUser)) }
+
+    if ($statements.Count -eq 0) {
+        Write-PgPassFile -Paths $Paths -Password $Password
+        return
+    }
+
+    Write-Step ('迁移历史数据：把数据库与用户由 {0} 改名为 {1}' -f $legacyName, $script:DbName)
+    Write-Info '只改名，不搬数据；改完可直接进入，凭证与账套都在。'
+
+    # 一条连接里依次执行：先改库、再改角色。ON_ERROR_STOP 保证前一句失败时后一句不执行。
+    $psqlArgs = @('-h', '127.0.0.1', '-p', $port, '-U', $loginName, '-d', 'postgres', '-v', 'ON_ERROR_STOP=1')
+    foreach ($sql in $statements) { $psqlArgs += @('-c', $sql) }
+
+    $renamed = Invoke-Native -FilePath $psql -TimeoutMs 120000 -Arguments $psqlArgs
+    Write-PgPassFile -Paths $Paths -Password $Password
+
+    if ($renamed.ExitCode -ne 0) {
+        Write-Fail ('历史数据库改名失败（退出码 {0}）' -f $renamed.ExitCode)
+        Write-Info '数据仍在原来的库里，未做任何删除。请把下面的输出发给技术支持：'
+        Show-NativeOutput -Result $renamed -Lines 10
+        throw '历史数据库改名失败'
+    }
+
+    $verify = Invoke-Native -FilePath $psql -TimeoutMs 30000 -Arguments @(
+        '-h', '127.0.0.1', '-p', $port, '-U', $script:DbUser, '-d', 'postgres',
+        '-tAc', "select count(*) from pg_database where datname='$($script:DbName)'"
+    )
+    if (([string]$verify.Output).Trim() -ne '1') {
+        Write-Fail '改名后未找到新数据库，已停止启动。'
+        Show-NativeOutput -Result $verify -Lines 10
+        throw '历史数据库改名校验失败'
+    }
+    Write-Ok ('历史数据库已迁移为 {0}' -f $script:DbName)
+}
+
+function Ensure-YangheDatabase {
+    param(
+        [Parameter(Mandatory)]$Paths,
+        [Parameter(Mandatory)][string]$Password
+    )
+
+    Update-LegacyDatabaseNames -Paths $Paths -Password $Password
     Write-PgPassFile -Paths $Paths -Password $Password
 
     $check = Invoke-Psql -Paths $Paths -Sql "select 1 from pg_database where datname='$($script:DbName)'"
@@ -359,7 +459,7 @@ function Get-PgVersionText {
     return 'unknown'
 }
 
-function Backup-LemonDatabase {
+function Backup-YangheDatabase {
     param(
         [Parameter(Mandatory)]$Paths,
         [Parameter(Mandatory)][string]$Password,
@@ -374,7 +474,7 @@ function Backup-LemonDatabase {
     }
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $final = Join-Path $Paths.BackupDir ('lemon-' + $stamp + '.dump')
+    $final = Join-Path $Paths.BackupDir ('yanghe-finance-' + $stamp + '.dump')
     $tmp = $final + '.partial'
 
     $r = Invoke-Native -FilePath $pgDump -TimeoutMs 600000 -Arguments @(
@@ -403,7 +503,7 @@ function Backup-LemonDatabase {
         Write-Warn2 '备份文件已生成，但校验未通过，请检查磁盘空间。'
     }
 
-    $expired = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'lemon-*.dump' -ErrorAction SilentlyContinue |
+    $expired = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'yanghe-finance-*.dump' -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$KeepDays) })
     foreach ($f in $expired) {
         Remove-Item -LiteralPath $f.FullName -Force -ErrorAction SilentlyContinue

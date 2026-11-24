@@ -8,13 +8,13 @@ import (
 
 	"github.com/shopspring/decimal"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/ledger"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/standard"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/account"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/auxiliary"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/ledger"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/standard"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 // piece 一笔待结转的余额：某科目（或其某个辅助核算组合）的期末净额，借方为正。

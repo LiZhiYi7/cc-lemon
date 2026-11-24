@@ -1,6 +1,6 @@
-# 柠檬账（cc-lemon）
+# 阳和财务系统（yanghe-finance）
 
-[![CI](https://github.com/LiZhiYi7/cc-lemon/actions/workflows/ci.yml/badge.svg)](https://github.com/LiZhiYi7/cc-lemon/actions/workflows/ci.yml)
+[![CI](https://github.com/LiZhiYi7/yanghe-finance/actions/workflows/ci.yml/badge.svg)](https://github.com/LiZhiYi7/yanghe-finance/actions/workflows/ci.yml)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![Vue](https://img.shields.io/badge/Vue-3-42B883?logo=vue.js&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
@@ -47,7 +47,7 @@
 模块化单体。业务模块只通过对方导出的 Service 交互，不直接读写对方的表；跨模块事务通过 context 传播。
 
 ```
-cmd/lemon ──► internal/app（装配：创建模块、挂载路由）
+cmd/yanghe-finance ──► internal/app（装配：创建模块、挂载路由）
                │
                ├── internal/modules/   业务模块
                │     iam        用户、登录
@@ -95,17 +95,45 @@ cmd/lemon ──► internal/app（装配：创建模块、挂载路由）
 恢复备份：
 
 ```bash
-docker compose exec -T db pg_restore -U lemon -d lemon --clean --if-exists < backups/lemon-<时间>.dump
+docker compose exec -T db pg_restore -U yanghe_finance -d yanghe_finance --clean --if-exists < backups/yanghe-finance-<时间>.dump
 ```
 
 > 系统面向可信局域网，默认 HTTP。如需跨网访问，请在前面加反向代理并启用 HTTPS。
+
+## 从旧版本升级（柠檬账 → 阳和财务系统）
+
+本版本把产品名、二进制名、数据库名与环境变量前缀都改成了 `yanghe-finance`。**数据不会丢**，但要按下面的步骤升级。
+
+**Windows 单机包 / 服务器包**：用新包覆盖程序目录后正常启动即可。启动脚本会先用旧用户名连一次数据库，把库和用户**原地改名**（`ALTER DATABASE/ROLE ... RENAME`，OID 不变，属主与权限全部保留），并在控制台打印「迁移历史数据：把数据库与用户由 lemon 改名为 yanghe_finance」。旧备份文件名会自动改成新前缀，旧防火墙规则会被清理。若改名失败会**停止启动并保留原库**，不会建空库。
+
+**NAS / Docker**：`POSTGRES_DB`、`POSTGRES_USER` 两个环境变量对已有数据卷无效，必须手工改名一次：
+
+```bash
+cd deploy
+docker compose exec -T db pg_dump -U lemon -d lemon -Fc > /tmp/before.dump   # 回滚兜底
+docker compose stop app
+docker compose exec -T db psql -U lemon -d postgres \
+  -c 'ALTER DATABASE lemon RENAME TO yanghe_finance' \
+  -c 'ALTER ROLE lemon RENAME TO yanghe_finance'
+docker compose exec -T db psql -U yanghe_finance -d yanghe_finance -c 'select count(*) from vouchers'
+```
+
+确认凭证条数与升级前一致后，删掉旧 compose 项目留下的容器（`.env` 里的 `DATA_DIR` 是宿主机路径，删容器不影响数据），再用新 compose 启动：
+
+```bash
+docker ps -a --filter label=com.docker.compose.project=cc-lemon
+docker rm -f <上面列出的容器>
+docker compose up -d
+```
+
+> **仓库名**：Go module 路径已改为 `github.com/lizhiyi7/yanghe-finance`。若 GitHub 仓库仍叫 `cc-lemon`，请到 Settings → Rename 改成 `yanghe-finance`；改名前 README 的 CI 徽章与克隆地址会 404，代码本身不受影响。
 
 ## 本地开发
 
 需要 Go 1.26+、Node 22+、PostgreSQL 16。
 
 ```bash
-export LEMON_DATABASE_DSN='postgres://lemon:lemon@localhost:5432/lemon?sslmode=disable'
+export YANGHE_FINANCE_DATABASE_DSN='postgres://yanghe_finance:yanghe_finance@localhost:5432/yanghe_finance?sslmode=disable'
 make dev-server
 ```
 
@@ -120,16 +148,16 @@ make dev-web
 端到端测试会清空目标库（`drop schema public`），请务必指向专用测试库：
 
 ```bash
-LEMON_TEST_DSN='postgres://lemon:lemon@localhost:5432/lemon_test?sslmode=disable' make test
+YANGHE_FINANCE_TEST_DSN='postgres://yanghe_finance:yanghe_finance@localhost:5432/yanghe_finance_test?sslmode=disable' make test
 ```
 
-未设置 `LEMON_TEST_DSN` 时测试会跳过。覆盖六个场景：小企业账务全流程、政府会计平行记账与权限、辅助核算、预算会计年末结转、经营亏损特例、批量导入原子性；断言精确到分，并校验重复结转的幂等性。
+未设置 `YANGHE_FINANCE_TEST_DSN` 时测试会跳过。覆盖六个场景：小企业账务全流程、政府会计平行记账与权限、辅助核算、预算会计年末结转、经营亏损特例、批量导入原子性；断言精确到分，并校验重复结转的幂等性。
 
 CI 在 push 到 `main` 和 PR 时执行 `gofmt` 检查、`go vet`、`go build`、`go test`（起真实 PostgreSQL service）以及前端 `vue-tsc` 类型检查与构建。
 
 ## 演示数据
 
-服务启动后执行下面的命令，会创建两套演示账（行政事业单位、小企业）并录入三个月业务，登录账号 `admin` / `lemon-demo`。只用于演示或培训环境。
+服务启动后执行下面的命令，会创建两套演示账（行政事业单位、小企业）并录入三个月业务，登录账号 `admin` / `yanghe-demo`。只用于演示或培训环境。
 
 ```bash
 make demo-data
@@ -137,7 +165,7 @@ make demo-data
 
 ## 配置
 
-运行配置见 [config.example.yaml](config.example.yaml)，每一项都可用 `LEMON_` 前缀的环境变量覆盖。
+运行配置见 [config.example.yaml](config.example.yaml)，每一项都可用 `YANGHE_FINANCE_` 前缀的环境变量覆盖。
 
 业务配置都是数据而非代码：
 

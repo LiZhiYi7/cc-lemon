@@ -1,19 +1,19 @@
 @echo off
 rem ============================================================
-rem  Lemon Accounting - client launcher (ASCII only)
+rem  Yanghe Accounting - client launcher (ASCII only)
 rem  Edit server.ini to set the server address, then run this.
 rem ============================================================
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-set "LEMON_URL="
+set "YANGHE_FINANCE_URL="
 if exist "server.ini" (
   for /f "usebackq tokens=1,* delims==" %%a in ("server.ini") do (
-    if /i "%%a"=="url" set "LEMON_URL=%%b"
+    if /i "%%a"=="url" set "YANGHE_FINANCE_URL=%%b"
   )
 )
 
-if "%LEMON_URL%"=="" (
+if "%YANGHE_FINANCE_URL%"=="" (
   echo.
   echo   [ERROR] server.ini not found, or "url" is empty.
   echo.
@@ -34,6 +34,6 @@ if not exist "%~dp0firefox\firefox.exe" (
 )
 
 echo.
-echo   Opening %LEMON_URL% ...
-start "" "%~dp0firefox\firefox.exe" -no-remote -profile "%~dp0profile" "%LEMON_URL%"
+echo   Opening %YANGHE_FINANCE_URL% ...
+start "" "%~dp0firefox\firefox.exe" -no-remote -profile "%~dp0profile" "%YANGHE_FINANCE_URL%"
 exit /b 0

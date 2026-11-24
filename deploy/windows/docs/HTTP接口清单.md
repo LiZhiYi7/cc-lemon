@@ -1,4 +1,4 @@
-# 柠檬账 · HTTP 接口清单
+# 阳和财务系统 · HTTP 接口清单
 
 供对接、集成或排障使用。所有接口均为 JSON。
 
@@ -195,4 +195,4 @@ curl -s http://127.0.0.1:8080/api/v1/books -H "Authorization: Bearer $TOKEN"
 | `closing:run` | 执行期末结转 | owner、会计 |
 | `period:close` | 结账 / 反结账 | owner、会计 |
 
-内置角色：`owner`（账套管理员）、`accountant`（会计）、`reviewer`（审核）、`viewer`（查看）。角色定义在 `configs/roles.yaml`，可通过 `LEMON_AUTH_ROLES_FILE` 指向自定义文件覆盖。
+内置角色：`owner`（账套管理员）、`accountant`（会计）、`reviewer`（审核）、`viewer`（查看）。角色定义在 `configs/roles.yaml`，可通过 `YANGHE_FINANCE_AUTH_ROLES_FILE` 指向自定义文件覆盖。

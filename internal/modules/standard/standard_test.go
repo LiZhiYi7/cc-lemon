@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lizhiyi7/cc-lemon/configs"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/standard"
+	"github.com/lizhiyi7/yanghe-finance/configs"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/standard"
 )
 
 // 默认（不配置 allow）应加载全部内置准则。

@@ -6,26 +6,26 @@
 #   于是把编译挪到宿主机，镜像里只留 COPY，arm64 组装只需十几秒。
 #
 # 构建方式（仓库根目录）：
-#   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o deploy/.cache/lemon-amd64 ./cmd/lemon
+#   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o deploy/.cache/yanghe-finance-amd64 ./cmd/yanghe-finance
 #   docker buildx build --platform linux/amd64 -f deploy/Dockerfile.runtime \
-#     --build-arg BIN=deploy/.cache/lemon-amd64 -t cc-lemon:1.0.0-amd64 --output type=docker,dest=app.tar .
+#     --build-arg BIN=deploy/.cache/yanghe-finance-amd64 -t yanghe-finance:1.0.0-amd64 --output type=docker,dest=app.tar .
 
 FROM alpine:3.21
 
 # ca-certificates 供将来访问 HTTPS 用；tzdata 让 TZ 环境变量生效（日志与备份文件名依赖它）
-RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 lemon
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 yanghe
 
 WORKDIR /app
 
 # 预编译的二进制：必须与目标平台架构一致，由调用方通过 --build-arg BIN 指定
-ARG BIN=deploy/.cache/lemon-amd64
-COPY ${BIN} /app/lemon
+ARG BIN=deploy/.cache/yanghe-finance-amd64
+COPY ${BIN} /app/yanghe-finance
 COPY web/dist /app/web
 
-ENV LEMON_SERVER_ADDR=:8080 \
-    LEMON_SERVER_STATIC_DIR=/app/web
+ENV YANGHE_FINANCE_SERVER_ADDR=:8080 \
+    YANGHE_FINANCE_SERVER_STATIC_DIR=/app/web
 
-USER lemon
+USER yanghe
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
-ENTRYPOINT ["/app/lemon"]
+ENTRYPOINT ["/app/yanghe-finance"]

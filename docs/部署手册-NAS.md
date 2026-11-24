@@ -1,7 +1,7 @@
-# 柠檬账 · NAS 部署手册
+# 阳和财务系统 · NAS 部署手册
 
 > **读者**：客户方负责服务器的技术人员（NAS 管理员、IT）
-> **目标**：把柠檬账部署到 NAS，成为局域网内多人使用的财务系统，并具备每日备份、可升级、可恢复的能力
+> **目标**：把阳和财务系统部署到 NAS，成为局域网内多人使用的财务系统，并具备每日备份、可升级、可恢复的能力
 > **前置要求**：会用 SSH 或 NAS 的 Docker 管理界面，看得懂 `docker compose` 命令
 
 部署完成后，员工怎么用见同目录 **《使用手册》**。
@@ -34,8 +34,8 @@
                     │  HTTP :8080
                     ▼
         ┌───────────────────────┐
-        │  app   柠檬账服务      │   Go 二进制 + 内嵌前端
-        │  端口 8080             │   数据库迁移在启动时自动执行
+        │  app   财务系统服务   │   Go 二进制 + 内嵌前端
+        │  端口 8080            │   数据库迁移在启动时自动执行
         └───────────┬───────────┘
                     │  容器内部网络 5432
                     ▼
@@ -103,21 +103,21 @@
 离线包由交付方提供，文件名形如：
 
 ```
-lemon-nas-amd64-1.0.0.tar.gz      # x86 NAS
-lemon-nas-arm64-1.0.0.tar.gz      # ARM NAS
+yanghe-finance-nas-amd64-1.0.0.tar.gz      # x86 NAS
+yanghe-finance-nas-arm64-1.0.0.tar.gz      # ARM NAS
 ```
 
 如需自行生成：在源码仓库的 **Actions → Release → Run workflow**，填入版本号运行，结束后在该次运行的 **Artifacts** 里下载对应架构的压缩包（amd64、arm64 各一个）。
 
 ### 4.2 上传并解压
 
-建议放在 Docker 专用目录下，例如群晖的 `/volume1/docker/lemon`。
+建议放在 Docker 专用目录下，例如群晖的 `/volume1/docker/yanghe_finance`。
 
 ```sh
-mkdir -p /volume1/docker/lemon
-cd /volume1/docker/lemon
-tar -xzf lemon-nas-amd64-1.0.0.tar.gz
-cd lemon-nas-amd64-1.0.0
+mkdir -p /volume1/docker/yanghe_finance
+cd /volume1/docker/yanghe_finance
+tar -xzf yanghe-finance-nas-amd64-1.0.0.tar.gz
+cd yanghe-finance-nas-amd64-1.0.0
 ls
 ```
 
@@ -146,7 +146,7 @@ sh nas/load-images.sh
 ```
 当前架构：x86_64（需要 amd64 镜像）
 导入：images/app-1.0.0-amd64.tar
-Loaded image: cc-lemon:1.0.0-amd64
+Loaded image: yanghe-finance:1.0.0-amd64
 导入：images/postgres-16-alpine-amd64.tar
 Loaded image: postgres:16-alpine
 已导入 2 个镜像
@@ -155,13 +155,13 @@ Loaded image: postgres:16-alpine
 检查：
 
 ```sh
-docker images | grep -E 'cc-lemon|postgres'
+docker images | grep -E 'yanghe-finance|postgres'
 ```
 
-应当看到 `cc-lemon:1.0.0-amd64` 与 `postgres:16-alpine`。**记住 `cc-lemon` 的完整 tag**，下一步要填进配置。
+应当看到 `yanghe-finance:1.0.0-amd64` 与 `postgres:16-alpine`。**记住 `yanghe-finance` 的完整 tag**，下一步要填进配置。
 
 脚本在导入后会核对一次镜像架构：如果这个包不是给当前机器用的，会直接报
-`镜像 cc-lemon:1.0.0-arm64 的架构是 [arm64]，当前机器需要 [amd64]` 并中止。
+`镜像 yanghe-finance:1.0.0-arm64 的架构是 [arm64]，当前机器需要 [amd64]` 并中止。
 看到这句话就是拿错包了，换另一个架构的包重新执行即可——不要继续往下走，否则容器起来就退出。
 
 ### 4.4 写配置文件
@@ -176,7 +176,7 @@ vi .env          # 或用 NAS 的文本编辑器打开
 | 变量 | 填什么 | 注意 |
 | --- | --- | --- |
 | `DB_PASSWORD` | 数据库密码，**16 位以上** | **只能用字母和数字**，见下方说明 |
-| `APP_IMAGE` | 上一步导入的 tag，如 `cc-lemon:1.0.0-amd64` | 写错会报「镜像不存在」 |
+| `APP_IMAGE` | 上一步导入的 tag，如 `yanghe-finance:1.0.0-amd64` | 写错会报「镜像不存在」 |
 
 其余可保持默认：
 
@@ -189,7 +189,7 @@ vi .env          # 或用 NAS 的文本编辑器打开
 | `BACKUP_KEEP_DAYS` | `30` | 备份保留天数 |
 | `TOKEN_TTL` | `12h` | 登录有效期，超过需重新登录 |
 
-> **关于密码字符**：`DB_PASSWORD` 会被拼进 `postgres://用户:密码@db:5432/lemon` 这样的连接串。如果密码里含 `@ : / ? # &` 等字符，连接串会被解析错，表现为应用一直连不上数据库。所以这里限制为**字母 + 数字**，例如 `Lemon2026NasDb7x4Kq`。
+> **关于密码字符**：`DB_PASSWORD` 会被拼进 `postgres://用户:密码@db:5432/yanghe_finance` 这样的连接串。如果密码里含 `@ : / ? # &` 等字符，连接串会被解析错，表现为应用一直连不上数据库。所以这里限制为**字母 + 数字**，例如 `Yanghe2026NasDb7x4Kq`。
 
 > **首次启动后不要再改 `DB_PASSWORD`**。数据库是用这个密码初始化的，改了配置却保留旧数据卷，新的密码对不上，应用会一直认证失败。确需更换，见 §10 最后一节。
 
@@ -246,8 +246,8 @@ http://<NAS 的 IP>:8080
 
 ```sh
 cd /volume1/docker
-git clone <源码仓库地址> cc-lemon
-cd cc-lemon/deploy
+git clone <源码仓库地址> yanghe-finance
+cd yanghe-finance/deploy
 cp .env.example .env
 vi .env                      # 改 DB_PASSWORD
 docker compose up -d --build
@@ -265,8 +265,8 @@ docker compose up -d --build
 
 ```sh
 # 注意 --platform：在 Apple Silicon / ARM 电脑上构建 x86 NAS 用的镜像必须指定
-docker build --platform linux/amd64 -f deploy/Dockerfile -t cc-lemon:1.0.0-amd64 .
-docker save cc-lemon:1.0.0-amd64 -o app.tar
+docker build --platform linux/amd64 -f deploy/Dockerfile -t yanghe-finance:1.0.0-amd64 .
+docker save yanghe-finance:1.0.0-amd64 -o app.tar
 
 docker pull --platform linux/amd64 postgres:16-alpine
 docker save postgres:16-alpine -o postgres.tar
@@ -310,7 +310,7 @@ docker compose -f docker-compose.offline.yml up -d
 http://192.168.1.100:8080
 ```
 
-（换成实际 IP。）介意记 IP 的，可以在内网 DNS 或路由器里加一条记录，例如 `http://lemon.lan:8080`。
+（换成实际 IP。）介意记 IP 的，可以在内网 DNS 或路由器里加一条记录，例如 `http://yanghe_finance.lan:8080`。
 
 ### 6.5 公网访问（谨慎）
 
@@ -333,10 +333,10 @@ Nginx 参考配置：
 ```nginx
 server {
     listen 443 ssl;
-    server_name lemon.example.com;
+    server_name yanghe_finance.example.com;
 
-    ssl_certificate     /etc/nginx/cert/lemon.pem;
-    ssl_certificate_key /etc/nginx/cert/lemon.key;
+    ssl_certificate     /etc/nginx/cert/yanghe_finance.pem;
+    ssl_certificate_key /etc/nginx/cert/yanghe_finance.key;
 
     client_max_body_size 50m;          # Excel 导入建议放宽
 
@@ -360,7 +360,7 @@ server {
 `backup` 容器启动后立即执行一次，此后每 24 小时执行一次：
 
 ```sh
-pg_dump -h db -U lemon -d lemon -Fc -f /backups/lemon-YYYYmmdd-HHMMSS.dump
+pg_dump -h db -U yanghe_finance -d yanghe_finance -Fc -f /backups/yanghe-finance-YYYYmmdd-HHMMSS.dump
 ```
 
 - 先写 `.partial` 临时文件，成功后再改名，避免留下半截备份
@@ -388,7 +388,7 @@ docker compose -f docker-compose.offline.yml logs --tail=20 backup
 ```sh
 mkdir -p /volume1/backup
 docker compose -f docker-compose.offline.yml exec -T db \
-  pg_dump -U lemon -d lemon -Fc > /volume1/backup/lemon-manual-$(date +%Y%m%d-%H%M).dump
+  pg_dump -U yanghe_finance -d yanghe_finance -Fc > /volume1/backup/yanghe-finance-manual-$(date +%Y%m%d-%H%M).dump
 ```
 
 ### 7.4 恢复
@@ -400,9 +400,9 @@ docker compose -f docker-compose.offline.yml exec -T db \
 docker compose -f docker-compose.offline.yml stop app
 
 # 2) 导入备份（--clean 会先删除库内已有对象）
-cat backups/lemon-20260101-020000.dump | \
+cat backups/yanghe-finance-20260101-020000.dump | \
   docker compose -f docker-compose.offline.yml exec -T db \
-  pg_restore -U lemon -d lemon --clean --if-exists --no-owner
+  pg_restore -U yanghe_finance -d yanghe_finance --clean --if-exists --no-owner
 
 # 3) 启动应用
 docker compose -f docker-compose.offline.yml start app
@@ -426,13 +426,13 @@ curl http://127.0.0.1:8080/healthz
 ```sh
 # 1) 先备份（重要）
 docker compose -f docker-compose.offline.yml exec -T db \
-  pg_dump -U lemon -d lemon -Fc > /volume1/backup/lemon-before-upgrade-$(date +%Y%m%d).dump
+  pg_dump -U yanghe_finance -d yanghe_finance -Fc > /volume1/backup/yanghe-finance-before-upgrade-$(date +%Y%m%d).dump
 
 # 2) 导入新镜像
 docker load -i images/app-1.1.0-amd64.tar
 
 # 3) 改 .env 里的镜像 tag
-vi .env      # APP_IMAGE=cc-lemon:1.1.0-amd64
+vi .env      # APP_IMAGE=yanghe-finance:1.1.0-amd64
 
 # 4) 只重建 app，数据库与备份容器不动
 docker compose -f docker-compose.offline.yml up -d app
@@ -460,7 +460,7 @@ docker compose -f docker-compose.offline.yml logs -f app
 | 重启应用（改配置后） | `docker compose -f docker-compose.offline.yml up -d app` |
 | 停止全部 | `docker compose -f docker-compose.offline.yml stop` |
 | 启动全部 | `docker compose -f docker-compose.offline.yml start` |
-| 进数据库命令行 | `docker compose -f docker-compose.offline.yml exec db psql -U lemon -d lemon` |
+| 进数据库命令行 | `docker compose -f docker-compose.offline.yml exec db psql -U yanghe_finance -d yanghe_finance` |
 | 看各容器资源占用 | `docker stats --no-stream` |
 | 看磁盘占用 | `du -sh data backups` |
 | 查应用版本 | `cat VERSION.txt`，或启动日志首行的 `version=` |
@@ -490,10 +490,10 @@ docker compose -f docker-compose.offline.yml logs -f app
 
 ```sh
 # 1) 用旧密码进数据库
-docker compose -f docker-compose.offline.yml exec db psql -U lemon -d lemon
+docker compose -f docker-compose.offline.yml exec db psql -U yanghe_finance -d yanghe_finance
 
 # 2) 在 psql 里执行（替换为新密码）
-ALTER USER lemon WITH PASSWORD '新密码';
+ALTER USER yanghe_finance WITH PASSWORD '新密码';
 
 # 3) 退出 psql，再改 .env 里的 DB_PASSWORD 为新密码
 docker compose -f docker-compose.offline.yml up -d
@@ -553,7 +553,7 @@ docker compose -f docker-compose.offline.yml up -d
 交付版本默认只开放《政府会计制度（行政事业单位）》，新建账套时看不到其他准则。需要开放时，在 `docker-compose.offline.yml` 的 `app.environment` 下增加一行，然后 `up -d app`：
 
 ```yaml
-      LEMON_STANDARDS_ALLOW: gov_accounting,small_enterprise
+      YANGHE_FINANCE_STANDARDS_ALLOW: gov_accounting,small_enterprise
 ```
 
 留空或删除该行表示开放全部内置准则。

@@ -42,7 +42,7 @@ async function create() {
 
 <template>
   <div class="topbar">
-    <b>柠檬账</b>
+    <b>阳和财务系统</b>
     <span class="spacer" />
     <UserMenu />
   </div>
@@ -91,7 +91,7 @@ async function create() {
 </template>
 
 <style scoped>
-.topbar { height: 52px; background: #fff; border-bottom: 1px solid var(--lemon-border); display: flex; align-items: center; padding: 0 20px; font-size: 16px; }
+.topbar { height: 52px; background: #fff; border-bottom: 1px solid var(--yanghe-border); display: flex; align-items: center; padding: 0 20px; font-size: 16px; }
 .topbar .spacer { flex: 1; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .book { cursor: pointer; transition: box-shadow 0.15s; }
