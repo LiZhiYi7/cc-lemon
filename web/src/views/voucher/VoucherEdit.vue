@@ -282,54 +282,56 @@ const print = () => window.print()
         </span>
       </div>
 
-      <div v-for="(s, si) in sections" :key="s.ledger.id" class="section">
-        <div v-if="book.multiLedger" class="section-title">{{ s.ledger.name }}</div>
-        <table class="sheet entry">
-          <thead>
-            <tr>
-              <th style="width: 36px"></th>
-              <th style="width: 26%">摘要</th>
-              <th>会计科目</th>
-              <th style="width: 150px">借方金额</th>
-              <th style="width: 150px">贷方金额</th>
-              <th class="no-print" style="width: 44px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in s.rows" :key="i">
-              <td class="center muted">{{ i + 1 }}</td>
-              <td><el-input v-model="r.summary" :disabled="readonly" @focus="focusSummary(s, i)" /></td>
-              <td>
-                <AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" @change="onAccount(r)" />
-                <div v-if="book.auxTypesOf(r.account_id).length" class="aux">
-                  <AuxSelect v-for="t in book.auxTypesOf(r.account_id)" :key="t.id" v-model="r.aux[t.id]" :type-id="t.id" :placeholder="'选择' + t.name" :disabled="readonly" size="small" />
-                </div>
-              </td>
-              <td>
-                <el-input v-model="r.debit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'debit')" @blur="normalize(r, 'debit')" @keydown="(e: any) => autoBalance(e, s, r, 'debit')" />
-              </td>
-              <td>
-                <el-input v-model="r.credit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'credit')" @blur="normalize(r, 'credit')" @keydown="(e: any) => autoBalance(e, s, r, 'credit')" />
-              </td>
-              <td class="center no-print">
-                <el-button v-if="!readonly" link type="danger" tabindex="-1" @click="removeRow(s, i)">✕</el-button>
-              </td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3">
-                合计：{{ toChinese(totals[si].debit) }}
-                <el-tag v-if="totals[si].debit !== totals[si].credit" type="danger" size="small" disable-transitions style="margin-left: 8px">
-                  借贷差额 {{ fmtCents(totals[si].debit - totals[si].credit) }}
-                </el-tag>
-              </td>
-              <td class="num">{{ fmtCents(totals[si].debit) }}</td>
-              <td class="num">{{ fmtCents(totals[si].credit) }}</td>
-              <td class="no-print"></td>
-            </tr>
-          </tfoot>
-        </table>
+      <div class="sections" :class="{ 'two-col': book.multiLedger }">
+        <div v-for="(s, si) in sections" :key="s.ledger.id" class="section">
+          <div v-if="book.multiLedger" class="section-title">{{ s.ledger.name }}</div>
+          <table class="sheet entry">
+            <thead>
+              <tr>
+                <th style="width: 28px"></th>
+                <th style="width: 22%">摘要</th>
+                <th>会计科目</th>
+                <th style="width: 112px">借方金额</th>
+                <th style="width: 112px">贷方金额</th>
+                <th class="no-print" style="width: 34px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in s.rows" :key="i">
+                <td class="center muted">{{ i + 1 }}</td>
+                <td><el-input v-model="r.summary" :disabled="readonly" @focus="focusSummary(s, i)" /></td>
+                <td>
+                  <AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" @change="onAccount(r)" />
+                  <div v-if="book.auxTypesOf(r.account_id).length" class="aux">
+                    <AuxSelect v-for="t in book.auxTypesOf(r.account_id)" :key="t.id" v-model="r.aux[t.id]" :type-id="t.id" :placeholder="'选择' + t.name" :disabled="readonly" size="small" />
+                  </div>
+                </td>
+                <td>
+                  <el-input v-model="r.debit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'debit')" @blur="normalize(r, 'debit')" @keydown="(e: any) => autoBalance(e, s, r, 'debit')" />
+                </td>
+                <td>
+                  <el-input v-model="r.credit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'credit')" @blur="normalize(r, 'credit')" @keydown="(e: any) => autoBalance(e, s, r, 'credit')" />
+                </td>
+                <td class="center no-print">
+                  <el-button v-if="!readonly" link type="danger" tabindex="-1" @click="removeRow(s, i)">✕</el-button>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3">
+                  合计：{{ toChinese(totals[si].debit) }}
+                  <el-tag v-if="totals[si].debit !== totals[si].credit" type="danger" size="small" disable-transitions style="margin-left: 8px">
+                    借贷差额 {{ fmtCents(totals[si].debit - totals[si].credit) }}
+                  </el-tag>
+                </td>
+                <td class="num">{{ fmtCents(totals[si].debit) }}</td>
+                <td class="num">{{ fmtCents(totals[si].credit) }}</td>
+                <td class="no-print"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       <AttachBar ref="attachRef" :base="book.base" :voucher-id="id" :readonly="readonly" :max="20" />
@@ -344,19 +346,58 @@ const print = () => window.print()
 </template>
 
 <style scoped>
-.voucher { max-width: 1100px; margin: 0 auto; }
+/* 左右两栏：财务会计在左、预算会计在右。单账簿账套只有一个分区，自然占满整行。
+   窄屏不回落单列（业务要求始终并排），靠 min-width 让页面出现横向滚动。 */
+.voucher { max-width: 1680px; min-width: 1080px; margin: 0 auto; }
 .title { text-align: center; font-size: 20px; letter-spacing: 6px; margin: 4px 0 14px; }
 .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .unit { flex: 1; text-align: center; }
-.section + .section { margin-top: 18px; }
-.section-title { font-weight: 600; margin-bottom: 6px; padding-left: 8px; border-left: 3px solid var(--el-color-primary); }
+.sections { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 20px; align-items: start; }
+.sections.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.section { min-width: 0; }
+.section-title { font-weight: 600; margin-bottom: 6px; padding-left: 8px; border-left: 3px solid var(--el-color-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 固定表格布局，列宽才可预测：两栏时科目列被压窄，长名称靠省略号收尾。
+   单元格必须 border-box，否则 th 的左右内边距会额外吃掉两栏共约 120px，
+   科目列会被挤到几乎不可用。 */
+.entry { table-layout: fixed; }
+.entry th, .entry td { box-sizing: border-box; }
+.entry th { padding: 7px 4px; }
 .entry td { padding: 2px; }
 .entry tfoot td { padding: 8px 10px; }
+.entry :deep(.el-input), .entry :deep(.el-select) { width: 100%; min-width: 0; }
 .aux { display: flex; gap: 4px; padding: 0 4px 4px; }
+.aux :deep(.el-select) { min-width: 0; }
 .aux :deep(.el-select__wrapper) { background: #f6f8fb !important; }
 .aux :deep(.el-select__placeholder.is-transparent) { color: #e6a23c; }
 .entry :deep(.el-input__wrapper), .entry :deep(.el-select__wrapper) { box-shadow: none !important; background: transparent; }
 .entry :deep(.el-input__wrapper.is-focus), .entry :deep(.el-select__wrapper.is-focused) { box-shadow: 0 0 0 1px var(--el-color-primary) inset !important; }
 .entry :deep(.amount input) { text-align: right; font-variant-numeric: tabular-nums; }
 .foot { display: flex; gap: 40px; margin-top: 12px; font-size: 13px; }
+
+/* 打印：A4 纵向放不下两栏（扣掉固定列后科目列会被压成负数），
+   所以固定用横向。纸张方向由浏览器按 @page 走，用户不必手选。 */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+  .voucher {
+    max-width: none;
+    min-width: 0;
+  }
+  .sections {
+    gap: 0 10mm;
+  }
+  .section {
+    break-inside: avoid;
+  }
+  .entry th,
+  .entry td {
+    padding: 2px 3px;
+    font-size: 11px;
+  }
+  tfoot {
+    break-inside: avoid;
+  }
+}
 </style>
