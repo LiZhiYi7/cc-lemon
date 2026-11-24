@@ -48,6 +48,10 @@ function onPicked(e: Event) {
   el.value = ''
 }
 
+function onDragOver() {
+  if (!props.readonly) dragging.value = true
+}
+
 function onDrop(e: DragEvent) {
   dragging.value = false
   if (props.readonly) return
@@ -206,7 +210,7 @@ defineExpose({ flush, reload, retry })
   <div
     class="attach"
     :class="{ dragging }"
-    @dragover.prevent="dragging = true"
+    @dragover.prevent="onDragOver"
     @dragleave.prevent="dragging = false"
     @drop.prevent="onDrop"
   >
@@ -218,7 +222,8 @@ defineExpose({ flush, reload, retry })
         <el-button size="small" :loading="uploading" @click="pick">选择图片</el-button>
         <span class="muted hint no-print">也可直接拖进来</span>
       </template>
-      <el-button v-else-if="queue.length && !readonly" size="small" type="warning" plain :loading="uploading" @click="retry">
+      <!-- 与张数上限无关：上传失败后必须随时能补传 -->
+      <el-button v-if="queue.length && !readonly" size="small" type="warning" plain :loading="uploading" @click="retry">
         重试上传（{{ queue.length }}）
       </el-button>
     </div>
