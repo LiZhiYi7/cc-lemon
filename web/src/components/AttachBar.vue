@@ -223,7 +223,7 @@ defineExpose({ flush, reload, retry })
         <span class="muted hint no-print">也可直接拖进来</span>
       </template>
       <!-- 与张数上限无关：上传失败后必须随时能补传 -->
-      <el-button v-if="queue.length && !readonly" size="small" type="warning" plain :loading="uploading" @click="retry">
+      <el-button v-if="voucherId > 0 && queue.length && !readonly" size="small" type="warning" plain :loading="uploading" @click="retry">
         重试上传（{{ queue.length }}）
       </el-button>
     </div>
