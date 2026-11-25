@@ -3,10 +3,10 @@
 <head>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta charset="utf-8">
-<title>柠檬账</title>
+<title>阳和财务系统</title>
 <hta:application
-    id="lemonApp"
-    applicationname="柠檬账"
+    id="yangheApp"
+    applicationname="阳和财务系统"
     border="thin"
     caption="yes"
     innerborder="no"
@@ -68,14 +68,14 @@
 <body onload="boot()">
 <div class="app">
     <div class="hd">
-        <div class="logo">柠檬账</div>
+        <div class="logo">阳和财务系统</div>
         <div class="sub">局域网财务系统 · 政府会计制度（行政事业单位）</div>
     </div>
     <div class="body">
         <div class="row"><span id="dot" class="dot"></span><span id="status">正在检测服务状态…</span></div>
         <div class="hint" id="hint"></div>
         <div class="btns">
-            <button id="openBtn" disabled onclick="openProd()">打开柠檬账</button>
+            <button id="openBtn" disabled onclick="openProd()">打开阳和财务系统</button>
             <button id="stopBtn" class="ghost" disabled onclick="stopAll()">停止服务</button>
         </div>
     </div>
@@ -102,6 +102,53 @@ function rootDir() {
     return i > 0 ? href.substring(0, i) : href;
 }
 
+// 这份 .hta 同时是"打包模板"和"交付包入口"。在模板目录里双击时
+// 缺少 scripts/、exe、pgsql/，以前只能干等 120 秒报"启动超时"，
+// 让人误以为服务起不来。先做一次自检，缺什么直接说清楚。
+var REQUIRED = ['scripts\\start.ps1', 'yanghe-finance.exe', 'pgsql\\bin\\pg_ctl.exe', 'web\\index.html'];
+
+function checkEnv(mode) {
+    var miss = [];
+    try {
+        var fso = new ActiveXObject('Scripting.FileSystemObject');
+        var i, p;
+        for (i = 0; i < REQUIRED.length; i++) {
+            p = ROOT + '\\' + REQUIRED[i];
+            if (!fso.FileExists(p)) { miss.push(REQUIRED[i]); }
+        }
+        if (!fso.FileExists(ROOT + '\\config\\' + mode + '.yaml')) { miss.push('config\\' + mode + '.yaml'); }
+    } catch (e) {
+        return null; // FSO 不可用时不做判断，交给后续流程
+    }
+    return miss;
+}
+
+function envBroken(miss) {
+    setState('err', '当前目录不是安装包', '缺少：' + escapeHtml(miss.join('、')) +
+        '\n\n这里是打包用的模板，不能直接运行。请把交付包解压后，双击根目录下的「阳和财务系统.hta」。');
+    setButtons(false, false);
+}
+
+// 版本号原本写死，打包后与 VERSION.txt 对不上；这里直接读文件。
+function readVersion() {
+    try {
+        var fso = new ActiveXObject('Scripting.FileSystemObject');
+        var path = ROOT + '\\VERSION.txt';
+        if (!fso.FileExists(path)) { return ''; }
+        var s = new ActiveXObject('ADODB.Stream');
+        s.Type = 2;
+        s.Charset = 'utf-8';
+        s.Open();
+        s.LoadFromFile(path);
+        var text = s.ReadText();
+        s.Close();
+        var m = text.match(/版本\s*:\s*([0-9A-Za-z.\-+]+)/);
+        return m ? 'v' + m[1] : '';
+    } catch (e) {
+        return '';
+    }
+}
+
 function openUrl(url) {
     try { new ActiveXObject('Shell.Application').ShellExecute(url); } catch (e) { }
 }
@@ -110,6 +157,10 @@ function openUrl(url) {
 // 返回 false 表示系统组件不可用（例如被安全策略限制），调用方要给出替代入口
 function runScript(script, args) {
     try {
+        // Run 只负责把 powershell 拉起来，脚本不存在时同样返回成功，
+        // 结果就是静默失败 + 120 秒假超时。先确认文件在。
+        var fso = new ActiveXObject('Scripting.FileSystemObject');
+        if (!fso.FileExists(ROOT + '\\scripts\\' + script)) { return false; }
         var cmd = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' +
             ROOT + '\\scripts\\' + script + '" ' + args;
         shell().Run(cmd, 7, false);
@@ -184,7 +235,10 @@ function setButtons(canOpen, canStop) {
 
 function boot() {
     ROOT = rootDir();
-    document.getElementById('ver').innerHTML = 'v1.0.0';
+    var ver = readVersion();
+    document.getElementById('ver').innerHTML = ver;
+    var miss = checkEnv('prod');
+    if (miss && miss.length) { envBroken(miss); return; }
     if (healthy(PORT_PROD)) {
         onReady();
         return;
@@ -243,6 +297,8 @@ function openDemo() {
         openUrl('http://127.0.0.1:' + PORT_DEMO);
         return;
     }
+    var miss = checkEnv('demo');
+    if (miss && miss.length) { envBroken(miss); return; }
     setState('busy', '正在启动单机体验…', '仅本机可访问，端口 18080');
     if (!runScript('start.ps1', '-Mode demo -NoBrowser')) { cannotRun(); return; }
     waitFor(PORT_DEMO, function () {

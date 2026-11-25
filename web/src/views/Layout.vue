@@ -49,7 +49,7 @@ const active = computed(() => {
 <template>
   <el-container v-if="ready && book.detail" class="layout">
     <el-aside width="200px" class="aside">
-      <div class="brand">柠檬账</div>
+      <div class="brand">阳和财务系统</div>
       <el-menu :default-active="active" router :default-openeds="groups.map((g) => g.title)">
         <el-menu-item :index="prefix + 'home'">
           <el-icon><HomeFilled /></el-icon>
@@ -82,11 +82,11 @@ const active = computed(() => {
 
 <style scoped>
 .layout { height: 100%; }
-.aside { background: #fff; border-right: 1px solid var(--lemon-border); overflow-y: auto; }
+.aside { background: #fff; border-right: 1px solid var(--yanghe-border); overflow-y: auto; }
 .brand { height: 52px; line-height: 52px; padding-left: 20px; font-size: 18px; font-weight: 700; color: var(--el-color-primary); }
 .aside :deep(.el-menu) { border-right: none; }
 .aside :deep(.el-menu-item) { height: 40px; line-height: 40px; }
-.header { background: #fff; border-bottom: 1px solid var(--lemon-border); display: flex; align-items: center; gap: 12px; }
+.header { background: #fff; border-bottom: 1px solid var(--yanghe-border); display: flex; align-items: center; gap: 12px; }
 .book-name { font-weight: 600; color: inherit; text-decoration: none; }
 .main { padding: 0; }
 </style>

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -14,14 +15,15 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shopspring/decimal"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/audit"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/auth"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/account"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/auxiliary"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/audit"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/auth"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/filestore"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 const (
@@ -89,10 +91,11 @@ type Service struct {
 	books    *book.Service
 	accounts *account.Service
 	aux      *auxiliary.Service
+	files    *filestore.Store
 }
 
-func New(d *db.DB, books *book.Service, accounts *account.Service, aux *auxiliary.Service) *Service {
-	return &Service{db: d, books: books, accounts: accounts, aux: aux}
+func New(d *db.DB, books *book.Service, accounts *account.Service, aux *auxiliary.Service, files *filestore.Store) *Service {
+	return &Service{db: d, books: books, accounts: accounts, aux: aux, files: files}
 }
 
 type header struct {
@@ -464,7 +467,7 @@ func (s *Service) query(ctx context.Context, where string, args ...any) ([]*Vouc
 }
 
 func (s *Service) Delete(ctx context.Context, b *book.Book, id int64) error {
-	return s.db.Tx(ctx, func(ctx context.Context) error {
+	err := s.db.Tx(ctx, func(ctx context.Context) error {
 		if err := s.books.Lock(ctx, b.ID); err != nil {
 			return err
 		}
@@ -484,6 +487,17 @@ func (s *Service) Delete(ctx context.Context, b *book.Book, id int64) error {
 		audit.Log(ctx, s.db, b.ID, "voucher.delete", "voucher", id, map[string]any{"no": fmt.Sprintf("%s %s-%d", h.period, h.word, h.number)})
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// 凭证已不存在，附件目录留着只会变成没人认领的孤儿文件。
+	// 清理失败不影响删除结果，记一条日志即可。
+	if s.files != nil && s.files.Enabled() {
+		if e := s.files.RemoveVoucher(b.ID, id); e != nil {
+			slog.Warn("清理凭证附件失败", "book", b.ID, "voucher", id, "err", e)
+		}
+	}
+	return nil
 }
 
 // IDsBySource 返回某期间内指定来源的凭证（供期末结转等业务模块定位自己生成的凭证）。

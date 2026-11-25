@@ -1,6 +1,6 @@
 # 架构说明
 
-本文说明柠檬账的技术选型、模块边界、数据模型与扩展方式。新增功能前请先读“扩展点”一节。
+本文说明阳和财务系统的技术选型、模块边界、数据模型与扩展方式。新增功能前请先读“扩展点”一节。
 
 ## 1. 目标与约束
 
@@ -26,7 +26,7 @@
 浏览器 (Vue SPA)
    │  HTTP/JSON  /api/v1
    ▼
-cmd/lemon ── internal/app（装配：创建模块、挂载路由）
+cmd/yanghe-finance ── internal/app（装配：创建模块、挂载路由）
    │
    ├── internal/modules/      业务模块（每个模块 = 一个包）
    │     iam        用户、登录
@@ -124,11 +124,11 @@ books 账套 ─┬─ ledgers 核算账簿（FIN 财务会计 / BUD 预算会�
 
 | 想做的事 | 怎么做 | 需要改代码吗 |
 | --- | --- | --- |
-| 增加一套会计准则（如企业会计准则、民间非营利） | 在 `configs/standards/` 加一个 YAML，或放到外部目录并设置 `LEMON_STANDARDS_DIR` | 否 |
+| 增加一套会计准则（如企业会计准则、民间非营利） | 在 `configs/standards/` 加一个 YAML，或放到外部目录并设置 `YANGHE_FINANCE_STANDARDS_DIR` | 否 |
 | 增加/调整报表 | 模板里加 `reports` 项；已有账套通过 `PUT /books/{id}/reports/{code}` 保存模板 | 否 |
 | 调整结转规则（目标科目、来源范围、频率） | `PUT /books/{id}/closing-rules/{code}` | 否 |
 | 调整平行记账映射 | 界面“设置 → 平行记账规则” | 否 |
-| 增加角色或调整角色权限 | 复制 `configs/roles.yaml` 修改，用 `LEMON_AUTH_ROLES_FILE` 指向它 | 否 |
+| 增加角色或调整角色权限 | 复制 `configs/roles.yaml` 修改，用 `YANGHE_FINANCE_AUTH_ROLES_FILE` 指向它 | 否 |
 | 增加账套参数 | `book.Settings` 加字段 + 默认值，前端账套设置页加表单项 | 少量 |
 | 增加一个业务模块（固定资产、出纳…） | 新建 `internal/modules/<名称>`，在 `app.New` 中创建并挂载路由；需要生成凭证时调用 `voucher.Service.Save` 并使用自己的 `source` 前缀；前端在 `config/menu.ts` 与 `router.ts` 各加一项 | 是，但不动既有模块 |
 | 增加辅助核算类别 | 界面“设置 → 辅助核算 → 新增类别”；或在准则模板 `aux_types` 中预置 | 否 |

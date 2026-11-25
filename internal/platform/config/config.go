@@ -1,4 +1,4 @@
-// Package config 负责加载运行配置：内置默认值 → YAML 文件 → 环境变量（LEMON_ 前缀）。
+// Package config 负责加载运行配置：内置默认值 → YAML 文件 → 环境变量（YANGHE_FINANCE_ 前缀）。
 package config
 
 import (
@@ -31,16 +31,24 @@ type Config struct {
 		// 用它把建账选项收敛到实际需要的范围，避免误选。
 		Allow []string `yaml:"allow"`
 	} `yaml:"standards"`
+	Storage struct {
+		Dir       string `yaml:"dir"`         // 凭证附件目录；留空则关闭附件功能
+		MaxFileMB int    `yaml:"max_file_mb"` // 单张图片上限
+		MaxFiles  int    `yaml:"max_files"`   // 单张凭证最多几张图片
+	} `yaml:"storage"`
 }
 
 func Load() (*Config, error) {
 	c := &Config{}
 	c.Server.Addr = ":8080"
-	c.Database.DSN = "postgres://lemon:lemon@localhost:5432/lemon?sslmode=disable"
+	c.Database.DSN = "postgres://yanghe_finance:yanghe_finance@localhost:5432/yanghe_finance?sslmode=disable"
 	c.Database.MaxConns = 10
 	c.Auth.TokenTTL = 12 * time.Hour
+	c.Storage.Dir = "data/attachments"
+	c.Storage.MaxFileMB = 10
+	c.Storage.MaxFiles = 20
 
-	path := os.Getenv("LEMON_CONFIG")
+	path := os.Getenv("YANGHE_FINANCE_CONFIG")
 	if path == "" {
 		if _, err := os.Stat("config.yaml"); err == nil {
 			path = "config.yaml"
@@ -61,12 +69,12 @@ func Load() (*Config, error) {
 			*dst = v
 		}
 	}
-	str("LEMON_SERVER_ADDR", &c.Server.Addr)
-	str("LEMON_SERVER_STATIC_DIR", &c.Server.StaticDir)
-	str("LEMON_DATABASE_DSN", &c.Database.DSN)
-	str("LEMON_AUTH_JWT_SECRET", &c.Auth.JWTSecret)
-	str("LEMON_STANDARDS_DIR", &c.Standards.Dir)
-	if v := os.Getenv("LEMON_STANDARDS_ALLOW"); v != "" {
+	str("YANGHE_FINANCE_SERVER_ADDR", &c.Server.Addr)
+	str("YANGHE_FINANCE_SERVER_STATIC_DIR", &c.Server.StaticDir)
+	str("YANGHE_FINANCE_DATABASE_DSN", &c.Database.DSN)
+	str("YANGHE_FINANCE_AUTH_JWT_SECRET", &c.Auth.JWTSecret)
+	str("YANGHE_FINANCE_STANDARDS_DIR", &c.Standards.Dir)
+	if v := os.Getenv("YANGHE_FINANCE_STANDARDS_ALLOW"); v != "" {
 		allowed := c.Standards.Allow[:0]
 		for _, part := range strings.Split(v, ",") {
 			if part = strings.TrimSpace(part); part != "" {
@@ -75,20 +83,35 @@ func Load() (*Config, error) {
 		}
 		c.Standards.Allow = allowed
 	}
-	str("LEMON_AUTH_ROLES_FILE", &c.Auth.RolesFile)
-	if v := os.Getenv("LEMON_DATABASE_MAX_CONNS"); v != "" {
+	str("YANGHE_FINANCE_AUTH_ROLES_FILE", &c.Auth.RolesFile)
+	if v := os.Getenv("YANGHE_FINANCE_DATABASE_MAX_CONNS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return nil, fmt.Errorf("LEMON_DATABASE_MAX_CONNS: %w", err)
+			return nil, fmt.Errorf("YANGHE_FINANCE_DATABASE_MAX_CONNS: %w", err)
 		}
 		c.Database.MaxConns = n
 	}
-	if v := os.Getenv("LEMON_AUTH_TOKEN_TTL"); v != "" {
+	if v := os.Getenv("YANGHE_FINANCE_AUTH_TOKEN_TTL"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return nil, fmt.Errorf("LEMON_AUTH_TOKEN_TTL: %w", err)
+			return nil, fmt.Errorf("YANGHE_FINANCE_AUTH_TOKEN_TTL: %w", err)
 		}
 		c.Auth.TokenTTL = d
+	}
+	str("YANGHE_FINANCE_STORAGE_DIR", &c.Storage.Dir)
+	if v := os.Getenv("YANGHE_FINANCE_STORAGE_MAX_FILE_MB"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("YANGHE_FINANCE_STORAGE_MAX_FILE_MB: %w", err)
+		}
+		c.Storage.MaxFileMB = n
+	}
+	if v := os.Getenv("YANGHE_FINANCE_STORAGE_MAX_FILES"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("YANGHE_FINANCE_STORAGE_MAX_FILES: %w", err)
+		}
+		c.Storage.MaxFiles = n
 	}
 	return c, nil
 }

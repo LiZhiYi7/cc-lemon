@@ -1,4 +1,4 @@
-﻿# 柠檬账 · Windows 启动脚本公共部分
+﻿# 阳和财务系统 · Windows 启动脚本公共部分
 # 由 start.ps1 / stop.ps1 / status.ps1 / backup.ps1 / restore.ps1 点引用（dot-source）。
 # 编码约定：本文件为 UTF-8 带 BOM + CRLF，PowerShell 5.1 才不会把中文当 ANSI 解码。
 
@@ -25,8 +25,8 @@ $script:Modes = @{
     }
 }
 
-$script:DbName = 'lemon'
-$script:DbUser = 'lemon'
+$script:DbName = 'yanghe_finance'
+$script:DbUser = 'yanghe_finance'
 
 # ---------------------------------------------------------------- 输出
 
@@ -63,7 +63,7 @@ function Test-AsciiPath {
     return ($Path -notmatch '[^\x00-\x7F]')
 }
 
-function Get-LemonPaths {
+function Get-YanghePaths {
     param(
         [Parameter(Mandatory)][string]$Root,
         [Parameter(Mandatory)][string]$Mode
@@ -78,7 +78,7 @@ function Get-LemonPaths {
     [pscustomobject]@{
         Root      = $Root
         Mode      = $m
-        Exe       = Join-Path $Root 'lemon.exe'
+        Exe       = Join-Path $Root 'yanghe-finance.exe'
         Web       = Join-Path $Root 'web'
         PgBin     = Join-Path $Root 'pgsql\bin'
         Config    = Join-Path $Root ('config\' + $Mode + '.yaml')
@@ -89,7 +89,9 @@ function Get-LemonPaths {
         Secret    = Join-Path (Join-Path $Root 'secrets') ($Mode + '.pass')
         PgPass    = Join-Path $dataDir 'pgpass.conf'
         RunDir    = Join-Path (Join-Path $Root 'run') $Mode
-        PidFile   = Join-Path (Join-Path $Root 'run') ($Mode + '\lemon.pid')
+        PidFile   = Join-Path (Join-Path $Root 'run') ($Mode + '\yanghe-finance.pid')
+        # 凭证图片：与 data/logs/run 同级，按模式分开，打包与备份都按这个路径找。
+        Attachments = Join-Path (Join-Path $Root 'attachments') $Mode
         # 会话标记：存在的含义是"这个模式由 start.ps1 托管，退出时该由它停数据库"。
         # 外部脚本（停止/恢复）先删掉它，再杀应用，避免 start.ps1 的清理把手里的数据库停掉。
         SessionFile = Join-Path (Join-Path $Root 'run') ($Mode + '\session')
@@ -97,13 +99,25 @@ function Get-LemonPaths {
     }
 }
 
-function Initialize-LemonDirs {
+function Initialize-YangheDirs {
     param([Parameter(Mandatory)]$Paths)
 
-    foreach ($d in @($Paths.DataDir, $Paths.LogDir, $Paths.RunDir, (Join-Path $Paths.Root 'secrets'), $Paths.BackupDir)) {
+    foreach ($d in @($Paths.DataDir, $Paths.LogDir, $Paths.RunDir, $Paths.Attachments, (Join-Path $Paths.Root 'secrets'), $Paths.BackupDir)) {
         if (-not (Test-Path -LiteralPath $d)) {
             New-Item -ItemType Directory -Path $d -Force | Out-Null
         }
+    }
+
+    # 旧版本的备份文件名前缀不同。不改名的话，新的保留策略永远匹配不到旧备份，
+    # 备份目录只会越占越多。这里一次性把旧前缀改成新前缀（幂等，重复执行无副作用）。
+    $legacy = @(Get-ChildItem -LiteralPath $Paths.BackupDir -Filter 'lemon-*.dump' -File -ErrorAction SilentlyContinue)
+    foreach ($f in $legacy) {
+        try {
+            Rename-Item -LiteralPath $f.FullName -NewName ('yanghe-finance-' + $f.Name.Substring(6)) -ErrorAction Stop
+        } catch { }
+    }
+    if ($legacy.Count -gt 0) {
+        Write-Info ('已把 {0} 个旧备份文件名改为新前缀' -f $legacy.Count)
     }
 }
 
@@ -156,7 +170,7 @@ function Test-PortInUse {
     }
 }
 
-function Test-LemonPreflight {
+function Test-YanghePreflight {
     param([Parameter(Mandatory)]$Paths)
 
     $root = $Paths.Root
@@ -169,14 +183,14 @@ function Test-LemonPreflight {
 
     if ($root.StartsWith('\\')) {
         Write-Fail '不能放在网络路径（\\ 开头）上运行，PostgreSQL 无法使用网络路径作为数据目录。'
-        Write-Fail '请把整个文件夹复制到本机硬盘，例如 C:\lemon。'
+        Write-Fail '请把整个文件夹复制到本机硬盘，例如 C:\yanghe-finance。'
         $fatal = $true
     } else {
         try {
             $drive = (Get-Item -LiteralPath $root).PSDrive
             if ($drive -and ($drive.DriveType -eq 'Network' -or $drive.DriveType -eq 'NoRootDirectory')) {
                 Write-Fail ('当前路径在 {0} 盘（网络驱动器）上，PostgreSQL 无法使用。' -f $drive.Name)
-                Write-Fail '请把整个文件夹复制到本机硬盘，例如 C:\lemon。'
+                Write-Fail '请把整个文件夹复制到本机硬盘，例如 C:\yanghe-finance。'
                 $fatal = $true
             }
             if ($drive -and $drive.DriveType -eq 'Removable') {
@@ -192,7 +206,7 @@ function Test-LemonPreflight {
         Write-Fail ('当前路径：{0}' -f $root)
         Write-Host ''
         Write-Host '  请这样处理：' -ForegroundColor Yellow
-        Write-Host '    1. 把整个文件夹剪切到纯英文路径，例如  C:\lemon' -ForegroundColor Yellow
+        Write-Host '    1. 把整个文件夹剪切到纯英文路径，例如  C:\yanghe-finance' -ForegroundColor Yellow
         Write-Host '    2. 重新双击对应的启动图标' -ForegroundColor Yellow
         Write-Host '  （文件夹名和上级目录都不能含中文；空格是允许的）' -ForegroundColor Gray
         $fatal = $true
@@ -244,7 +258,7 @@ function Test-PortOrFail {
 
 # ---------------------------------------------------------------- 密码
 
-function New-LemonPassword {
+function New-YanghePassword {
     param([int]$Length = 32)
 
     $chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
@@ -271,7 +285,7 @@ function Get-ModePassword {
 
     if (-not $Create) { return $null }
 
-    $pw = New-LemonPassword
+    $pw = New-YanghePassword
     Set-Content -LiteralPath $Paths.Secret -Value $pw -NoNewline -Encoding ascii
     try {
         & icacls.exe $Paths.Secret /inheritance:r /grant:r ("{0}:(R,W)" -f $env:USERNAME) | Out-Null
@@ -482,7 +496,7 @@ function Show-NativeOutput {
     }
 }
 
-function Get-LemonPid {
+function Get-YanghePid {
     param([Parameter(Mandatory)]$Paths)
 
     if (-not (Test-Path -LiteralPath $Paths.PidFile)) { return 0 }
@@ -491,7 +505,7 @@ function Get-LemonPid {
     $procId = 0
     if ([int]::TryParse($raw.Trim(), [ref]$procId)) {
         $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
-        if ($p -and $p.ProcessName -eq 'lemon') { return $procId }
+        if ($p -and $p.ProcessName -eq 'yanghe-finance') { return $procId }
     }
     return 0
 }
@@ -517,7 +531,7 @@ function Show-LogTail {
 # ---------------------------------------------------------------- 启动页回传
 
 function Set-StartError {
-    # 启动失败时把原因写给启动页（柠檬账.hta）。
+    # 启动失败时把原因写给启动页（阳和财务系统.hta）。
     # 服务窗口在失败后会关闭，客户不一定看得到；启动页能直接显示这句话。
     # 用 UTF-16LE：启动页通过 Scripting.FileSystemObject 按 Unicode 读取，不会乱码。
     param(

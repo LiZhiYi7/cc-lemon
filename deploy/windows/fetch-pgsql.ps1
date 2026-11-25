@@ -1,4 +1,4 @@
-﻿# 柠檬账 · 开发机依赖抓取
+﻿# 阳和财务系统 · 开发机依赖抓取
 # 下载便携版 PostgreSQL 与 VC++ 运行库到 deploy\windows\vendor\，供 package.ps1 使用。
 # 只需在首次打包前执行一次。
 
@@ -41,7 +41,7 @@ function Get-RemoteFile {
 }
 
 Write-Host ''
-Write-Host '柠檬账 · 抓取打包依赖' -ForegroundColor White
+Write-Host '阳和财务系统 · 抓取打包依赖' -ForegroundColor White
 Write-Host ''
 
 $pgZip = Join-Path $vendor ('postgresql-{0}-windows-x64-binaries.zip' -f $PgVersion)

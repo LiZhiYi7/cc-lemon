@@ -1,6 +1,6 @@
-﻿# 柠檬账 · 打包 Windows 客户端（Win7 / Win10 / Win11 通用）
+﻿# 阳和财务系统 · 打包 Windows 客户端（Win7 / Win10 / Win11 通用）
 #
-# 产物：build\release\lemon-client-<版本>.zip
+# 产物：build\release\yanghe-finance-client-<版本>.zip
 # 内容：绿色版 Firefox ESR 115（Win7 最后一个可用版本）+ 启动器 + 说明
 #
 # 用法：
@@ -22,7 +22,7 @@ $repo = Split-Path (Split-Path $winDir -Parent) -Parent
 $buildDir = Join-Path $repo 'build'
 $stageRoot = Join-Path $buildDir 'stage'
 $releaseDir = Join-Path $buildDir 'release'
-$folderName = 'lemon-client-' + $Version
+$folderName = 'yanghe-finance-client-' + $Version
 $stage = Join-Path $stageRoot $folderName
 
 if (-not $FirefoxDir) { $FirefoxDir = Join-Path $winDir 'vendor\firefox-115.45.0' }
@@ -51,7 +51,7 @@ function Remove-Tree {
 
 Write-Host ''
 Write-Host '============================================================' -ForegroundColor DarkCyan
-Write-Host ('  柠檬账 · 打包客户端 {0}' -f $Version) -ForegroundColor White
+Write-Host ('  阳和财务系统 · 打包客户端 {0}' -f $Version) -ForegroundColor White
 Write-Host '============================================================' -ForegroundColor DarkCyan
 
 Write-Head '检查浏览器'
@@ -80,19 +80,19 @@ Copy-Item -Path (Join-Path $FirefoxDir '*') -Destination $ffDst -Recurse -Force
 $tpl = Join-Path $winDir 'templates\client'
 Copy-Item -Path (Join-Path $tpl '*') -Destination $stage -Recurse -Force
 
-foreach ($f in @('1-打开柠檬账.bat', 'server.ini', '使用说明.txt', 'profile\user.js')) {
+foreach ($f in @('1-打开阳和财务系统.bat', 'server.ini', '使用说明.txt', 'profile\user.js')) {
     if (-not (Test-Path -LiteralPath (Join-Path $stage $f))) { Fail ('缺少文件：{0}' -f $f) }
 }
 Write-Done '启动器、配置、说明、浏览器配置已就位'
 
 $versionText = @(
-    '柠檬账 · 客户端'
+    '阳和财务系统 · 客户端'
     ('版本      : {0}' -f $Version)
     ('构建时间  : {0}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
     ('内置浏览器: Firefox ESR {0}' -f $ffVersion)
     ''
     '支持的客户端系统：Windows 7 SP1 / 10 / 11（64 位）'
-    '用法：修改 server.ini 里的 url，双击 1-打开柠檬账.bat'
+    '用法：修改 server.ini 里的 url，双击 1-打开阳和财务系统.bat'
 ) -join "`r`n"
 Set-Content -LiteralPath (Join-Path $stage 'VERSION.txt') -Value $versionText -Encoding UTF8
 Write-Done 'VERSION.txt'
@@ -104,7 +104,7 @@ if ($leaked) { Write-Host '   提示：包内存在 .log 文件，已忽略' -Fo
 Write-Done '包结构正常'
 
 Write-Head '打包'
-$zipPath = Join-Path $releaseDir ('lemon-client-' + $Version + '.zip')
+$zipPath = Join-Path $releaseDir ('yanghe-finance-client-' + $Version + '.zip')
 if (Test-Path -LiteralPath $zipPath) { [System.IO.File]::Delete($zipPath) }
 
 # 用 Compress-Archive：bsdtar 写中文文件名不带 UTF-8 标志位，跨语言环境会乱码

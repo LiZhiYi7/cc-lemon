@@ -165,7 +165,7 @@ onMounted(async () => {
 .columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 20px; }
 .row { cursor: pointer; }
 .reports { padding: 4px 16px; }
-.report { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px dashed var(--lemon-border); cursor: pointer; color: inherit; }
+.report { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px dashed var(--yanghe-border); cursor: pointer; color: inherit; }
 .report:last-child { border-bottom: none; }
 .report:hover span:first-child { color: var(--el-color-primary); }
 @media (max-width: 1100px) {

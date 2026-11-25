@@ -1,4 +1,4 @@
-// 柠檬账客户端 · 浏览器预置偏好
+// 阳和财务系统客户端 · 浏览器预置偏好
 // 放在 profile 目录下，Firefox 启动时自动读取，用于关闭首次运行引导、
 // 默认浏览器提示、遥测上报和自动更新（客户环境通常不允许外网）。
 user_pref("browser.shell.checkDefaultBrowser", false);

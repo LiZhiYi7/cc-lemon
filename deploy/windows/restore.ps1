@@ -1,29 +1,30 @@
-﻿# 柠檬账 · 从备份恢复
-# 用法：restore.ps1 -Mode prod -File "D:\...\lemon-20260101-020000.dump"
+﻿# 阳和财务系统 · 从备份恢复
+# 用法：restore.ps1 -Mode prod -File "D:\...\yanghe-finance-20260101-020000.dump"
 # 注意：会删除当前业务数据库后重建，恢复前会要求输入 YES 确认。
 
 [CmdletBinding()]
 param(
     [ValidateSet('demo', 'prod')][string]$Mode = 'prod',
     [Parameter(Mandatory)][string]$File,
+    [string]$AttachmentsZip = '',
     [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
-if ($env:LEMON_ROOT) { $Root = $env:LEMON_ROOT }
+if ($env:YANGHE_FINANCE_ROOT) { $Root = $env:YANGHE_FINANCE_ROOT }
 
 . (Join-Path $PSScriptRoot 'lib\common.ps1')
 . (Join-Path $PSScriptRoot 'lib\pg.ps1')
-. (Join-Path $PSScriptRoot 'lib\lemon.ps1')
+. (Join-Path $PSScriptRoot 'lib\app.ps1')
 
-$Paths = Get-LemonPaths -Root $Root -Mode $Mode
+$Paths = Get-YanghePaths -Root $Root -Mode $Mode
 
 try {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkCyan
-    Write-Host ('  柠檬账 · 恢复数据（{0}）' -f $Paths.Mode.Label) -ForegroundColor White
+    Write-Host ('  阳和财务系统 · 恢复数据（{0}）' -f $Paths.Mode.Label) -ForegroundColor White
     Write-Host '============================================================' -ForegroundColor DarkCyan
 
     if (-not (Test-Path -LiteralPath $File)) {
@@ -47,7 +48,7 @@ try {
         }
     }
 
-    Stop-LemonApp -Paths $Paths -External | Out-Null
+    Stop-YangheApp -Paths $Paths -External | Out-Null
 
     $startedHere = $false
     if (-not (Test-PgRunning -Paths $Paths)) {
@@ -89,6 +90,22 @@ try {
         Write-Fail '导入备份失败，数据库中没有表。'
         Show-NativeOutput -Result $r -Lines 15
         throw 'pg_restore 失败'
+    }
+
+    # 凭证图片不在 dump 里，需要单独指定图片压缩包（backups\yanghe-finance-files-*.zip）
+    if ($AttachmentsZip) {
+        if (-not (Test-Path -LiteralPath $AttachmentsZip)) {
+            Write-Warn2 ('找不到图片包：{0}，本次未恢复图片。' -f $AttachmentsZip)
+        } else {
+            Write-Step '恢复凭证图片'
+            if (-not (Test-Path -LiteralPath $Paths.Attachments)) {
+                New-Item -ItemType Directory -Path $Paths.Attachments -Force | Out-Null
+            }
+            Expand-Archive -LiteralPath $AttachmentsZip -DestinationPath $Paths.Attachments -Force
+            Write-Ok '图片附件已恢复'
+        }
+    } else {
+        Write-Warn2 '未指定 -AttachmentsZip，本次只恢复数据库；凭证上的图片需要另外解压到 attachments 目录。'
     }
 
     if ($startedHere) { Stop-PgCluster -Paths $Paths }

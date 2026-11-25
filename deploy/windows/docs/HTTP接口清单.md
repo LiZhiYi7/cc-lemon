@@ -1,4 +1,4 @@
-# 柠檬账 · HTTP 接口清单
+# 阳和财务系统 · HTTP 接口清单
 
 供对接、集成或排障使用。所有接口均为 JSON。
 
@@ -139,9 +139,24 @@ curl -s http://127.0.0.1:8080/api/v1/books -H "Authorization: Bearer $TOKEN"
 | DELETE | `/books/{id}/vouchers/{voucherID}` | 删除凭证 | `voucher:write` |
 | POST | `/books/{id}/vouchers/renumber` | 整理凭证号 | `voucher:write` |
 | POST | `/books/{id}/vouchers/review` | 批量审核 / 取消审核 | `voucher:review` |
+| GET | `/books/{id}/vouchers/{voucherID}/attachments` | 凭证图片列表（无图返回 `[]`） | 成员 |
+| GET | `/books/{id}/vouchers/{voucherID}/attachments/{attachmentID}` | 取图片二进制；`?thumb=1` 取缩略图 | 成员 |
+| POST | `/books/{id}/vouchers/{voucherID}/attachments` | 上传图片（`multipart/form-data`） | `voucher:write` |
+| DELETE | `/books/{id}/vouchers/{voucherID}/attachments/{attachmentID}` | 删除图片（204） | `voucher:write` |
 | GET | `/books/{id}/parallel-rules` | 平行记账规则 | 成员 |
 | POST | `/books/{id}/parallel-rules` | 新增规则 | `parallel:write` |
 | DELETE | `/books/{id}/parallel-rules/{ruleID}` | 删除规则 | `parallel:write` |
+
+### 凭证图片（附件）
+
+图片不存数据库，存放在配置的附件目录下：`{附件目录}/{账套}/{凭证}/`（Windows 上附件目录是 `attachments\<模式>`，NAS 上是 `data/attachments`），目录内 `index.json` 记录文件名、大小、上传人、时间。
+
+- 上传字段：`file`（必填，JPG / PNG / WebP）、`thumb`（可选，前端生成的 JPEG 缩略图）。
+- 服务端只按文件头判断类型，不认扩展名与客户端声明的 `Content-Type`；**不接受 SVG**。
+- 上限：单张 10MB（`YANGHE_FINANCE_STORAGE_MAX_FILE_MB`）、单张凭证 20 张（`YANGHE_FINANCE_STORAGE_MAX_FILES`）、单次请求体 12MB。
+- 已审核凭证或已结账期间返回 `409 conflict`。
+- 取图片必须带 `Authorization` 头（浏览器里不能用裸 `<img src>`，前端用 fetch + blob）。
+- 附件目录不可写时，上传返回 `503 attachment_unavailable`，读取接口仍返回空列表。
 
 ## 八、期末与报表
 
@@ -195,4 +210,4 @@ curl -s http://127.0.0.1:8080/api/v1/books -H "Authorization: Bearer $TOKEN"
 | `closing:run` | 执行期末结转 | owner、会计 |
 | `period:close` | 结账 / 反结账 | owner、会计 |
 
-内置角色：`owner`（账套管理员）、`accountant`（会计）、`reviewer`（审核）、`viewer`（查看）。角色定义在 `configs/roles.yaml`，可通过 `LEMON_AUTH_ROLES_FILE` 指向自定义文件覆盖。
+内置角色：`owner`（账套管理员）、`accountant`（会计）、`reviewer`（审核）、`viewer`（查看）。角色定义在 `configs/roles.yaml`，可通过 `YANGHE_FINANCE_AUTH_ROLES_FILE` 指向自定义文件覆盖。

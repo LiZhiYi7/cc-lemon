@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// 凭证录入 / 修改。平行记账账套按核算账簿分区录入，各区借贷各自平衡。
+// 凭证录入 / 修改。
+// 平行记账账套用**一张表**呈现：摘要列共享，左边财务会计三列、右边预算会计三列，
+// 同一行左右对齐（与客户提供的记账凭证版式一致）。两个账簿各自借贷平衡。
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { http } from '@/api/http'
 import type { Ledger, Voucher, VoucherLine } from '@/api/types'
@@ -10,6 +12,8 @@ import { fmtCents, fromCents, toCents, toChinese } from '@/utils/money'
 import { defaultDate, periodStr } from '@/utils/period'
 import AccountSelect from '@/components/AccountSelect.vue'
 import AuxSelect from '@/components/AuxSelect.vue'
+import AttachBar from '@/components/AttachBar.vue'
+import { useAttachQueue } from '@/stores/attachQueue'
 
 interface Row { summary: string; account_id?: number; debit: string; credit: string; aux: Record<number, number | undefined> }
 interface Section { ledger: Ledger; rows: Row[] }
@@ -23,6 +27,9 @@ const detail = book.detail!
 const id = ref(Number(route.params.voucherId) || 0)
 const loaded = ref<Voucher | null>(null)
 const saving = ref(false)
+const attachRef = ref<InstanceType<typeof AttachBar> | null>(null)
+// 待上传的图片放在模块级队列里：保存后路由会 replace 一次，本组件会被重建。
+const attachQueue = useAttachQueue()
 const head = reactive({
   word: detail.voucher_words.find((w) => w.is_default)?.word ?? detail.voucher_words[0]?.word ?? '',
   number: 0,
@@ -39,9 +46,8 @@ const toRow = (l: VoucherLine): Row => ({
   credit: amount(l.credit),
   aux: Object.fromEntries((l.aux ?? []).map((a) => [a.type_id, a.item_id])),
 })
-const sections = reactive<Section[]>(
-  book.ledgers.map((l) => ({ ledger: l, rows: Array.from({ length: l.is_primary ? MIN_ROWS : 2 }, emptyRow) })),
-)
+// 所有账簿的分录行数必须始终一致：表格是左右对齐的一张表，行数不一致就会错位。
+const sections = reactive<Section[]>(book.ledgers.map((l) => ({ ledger: l, rows: Array.from({ length: MIN_ROWS }, emptyRow) })))
 
 const readonly = computed(() => {
   if (!book.can('voucher:write')) return true
@@ -49,6 +55,32 @@ const readonly = computed(() => {
   if (!v) return false
   return v.status === 'reviewed' || `${v.year}-${String(v.month).padStart(2, '0')}` < periodStr(detail.current_period)
 })
+
+// 主账簿（财务会计）与次账簿（预算会计）。单账簿账套里两者指向同一组数据，
+// 模板上右侧三列由 book.multiLedger 控制不渲染。
+const finSec = computed<Section>(() => sections[0])
+const budSec = computed<Section>(() => sections[1] ?? sections[0])
+const rowCount = computed(() => finSec.value.rows.length)
+const rowIndexes = computed(() => Array.from({ length: rowCount.value }, (_, i) => i))
+const totals = computed(() =>
+  [finSec.value, budSec.value].map((s) => {
+    let debit = 0
+    let credit = 0
+    for (const r of s.rows) {
+      debit += toCents(r.debit)
+      credit += toCents(r.credit)
+    }
+    return { debit, credit }
+  }),
+)
+const totalFin = computed(() => totals.value[0])
+const totalBud = computed(() => totals.value[1])
+
+/** 把各账簿的行数对齐到最多的那一边（只增不减，用于加载与生成分录之后）。 */
+function alignRows() {
+  const n = Math.max(...sections.map((s) => s.rows.length))
+  for (const s of sections) while (s.rows.length < n) s.rows.push(emptyRow())
+}
 
 function fill(v: Voucher) {
   loaded.value = v
@@ -58,6 +90,7 @@ function fill(v: Voucher) {
     while (rows.length < 2) rows.push(emptyRow())
     s.rows = rows
   }
+  alignRows()
 }
 
 async function refreshNumber() {
@@ -74,24 +107,27 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', hotkey))
 
+// 有图还没传上去就离开页面时提示一次：这些图只存在浏览器里，走了就没了。
+onBeforeRouteLeave(async () => {
+  if (!attachQueue.value.length) return true
+  try {
+    await ElMessageBox.confirm(`还有 ${attachQueue.value.length} 张图片没上传，确定离开？`, '图片未上传', {
+      type: 'warning',
+      confirmButtonText: '仍然离开',
+      cancelButtonText: '留下',
+    })
+    return true
+  } catch {
+    return false
+  }
+})
+
 function hotkey(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault()
     if (!readonly.value) save(false)
   }
 }
-
-const totals = computed(() =>
-  sections.map((s) => {
-    let debit = 0
-    let credit = 0
-    for (const r of s.rows) {
-      debit += toCents(r.debit)
-      credit += toCents(r.credit)
-    }
-    return { debit, credit }
-  }),
-)
 
 // ---- 行内编辑 ----
 function onAmountInput(r: Row, field: 'debit' | 'credit') {
@@ -101,7 +137,7 @@ function normalize(r: Row, field: 'debit' | 'credit') {
   const c = toCents(r[field])
   r[field] = c ? fromCents(c) : ''
 }
-/** 在金额格按 “=” ：自动填入使本区借贷平衡的金额。 */
+/** 在金额格按 “=” ：自动填入使本账簿借贷平衡的金额。 */
 function autoBalance(e: KeyboardEvent, s: Section, r: Row, field: 'debit' | 'credit') {
   if (e.key !== '=') return
   e.preventDefault()
@@ -124,14 +160,32 @@ function onAccount(r: Row) {
     }
   }
 }
-function focusSummary(s: Section, i: number) {
-  const r = s.rows[i]
-  if (!r.summary && i > 0 && !readonly.value) r.summary = s.rows[i - 1].summary
-  if (i === s.rows.length - 1 && !readonly.value) s.rows.push(emptyRow())
+
+// ---- 摘要：一列共享，写一份同步到各账簿同序号行 ----
+function summaryOf(i: number) {
+  return finSec.value.rows[i]?.summary ?? ''
 }
-function removeRow(s: Section, i: number) {
-  s.rows.splice(i, 1)
-  while (s.rows.length < 2) s.rows.push(emptyRow())
+function setSummary(i: number, val: string) {
+  for (const s of sections) if (s.rows[i]) s.rows[i].summary = val
+}
+
+/** 光标进入某行：补摘要、末行自动加行。 */
+function focusRow(i: number) {
+  if (readonly.value) return
+  const prev = i > 0 ? finSec.value.rows[i - 1]?.summary : ''
+  if (!summaryOf(i) && prev) setSummary(i, prev)
+  if (i === rowCount.value - 1) addRow()
+}
+function addRow() {
+  if (readonly.value) return
+  for (const s of sections) s.rows.push(emptyRow())
+}
+function removeRow(i: number) {
+  if (readonly.value) return
+  for (const s of sections) s.rows.splice(i, 1)
+  // 删完对齐两边行数，但至少保留 2 行（与手工录入的最低要求一致）。
+  const n = Math.max(2, ...sections.map((s) => s.rows.length))
+  for (const s of sections) while (s.rows.length < n) s.rows.push(emptyRow())
 }
 
 function collect() {
@@ -160,6 +214,7 @@ async function generateParallel() {
       while (rows.length < 2) rows.push(emptyRow())
       s.rows = rows
     }
+    alignRows()
     ElMessage.success('已生成平行记账分录，请核对')
   }
   res.warnings.forEach((w) => ElMessage.warning({ message: w, duration: 6000 }))
@@ -178,7 +233,16 @@ async function save(andNew: boolean) {
     const v = id.value
       ? await http.put<Voucher>(`${book.base}/vouchers/${id.value}`, body)
       : await http.post<Voucher>(`${book.base}/vouchers`, body)
+    // 凭证已落库，再把暂存的图片逐张上传；单张失败不影响凭证本身。
+    let failed = 0
+    if (attachRef.value) failed = (await attachRef.value.flush(v.id)).failed
     ElMessage.success(`凭证 ${v.word}-${v.number} 已保存`)
+    if (failed) {
+      ElMessage.warning({
+        message: `凭证已保存，${failed} 张图片未上传。请在附件区点「重试上传」，否则它们只在这台电脑上。`,
+        duration: 10000,
+      })
+    }
     v.warnings?.forEach((w) => ElMessage.warning({ message: w, duration: 6000 }))
     if (andNew) {
       // 连续录入：保留日期与凭证字
@@ -186,7 +250,7 @@ async function save(andNew: boolean) {
       loaded.value = null
       head.numberTouched = false
       head.attachments = 0
-      sections.forEach((s) => (s.rows = Array.from({ length: s.ledger.is_primary ? MIN_ROWS : 2 }, emptyRow)))
+      sections.forEach((s) => (s.rows = Array.from({ length: MIN_ROWS }, emptyRow)))
       await refreshNumber()
     } else if (!id.value) {
       router.replace(`/b/${detail.id}/vouchers/${v.id}`)
@@ -253,79 +317,247 @@ const print = () => window.print()
         </span>
       </div>
 
-      <div v-for="(s, si) in sections" :key="s.ledger.id" class="section">
-        <div v-if="book.multiLedger" class="section-title">{{ s.ledger.name }}</div>
-        <table class="sheet entry">
-          <thead>
-            <tr>
-              <th style="width: 36px"></th>
-              <th style="width: 26%">摘要</th>
-              <th>会计科目</th>
-              <th style="width: 150px">借方金额</th>
-              <th style="width: 150px">贷方金额</th>
-              <th class="no-print" style="width: 44px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(r, i) in s.rows" :key="i">
-              <td class="center muted">{{ i + 1 }}</td>
-              <td><el-input v-model="r.summary" :disabled="readonly" @focus="focusSummary(s, i)" /></td>
+      <!-- 一张表：摘要 | 财务会计(科目/借/贷) | 预算会计(科目/借/贷) -->
+      <table class="sheet entry">
+        <colgroup>
+          <col style="width: 96px" />
+          <col />
+          <col style="width: 104px" />
+          <col style="width: 104px" />
+          <template v-if="book.multiLedger">
+            <col />
+            <col style="width: 104px" />
+            <col style="width: 104px" />
+          </template>
+        </colgroup>
+
+        <thead v-if="book.multiLedger">
+          <tr>
+            <th rowspan="2" class="c-summary">摘要</th>
+            <th colspan="3">{{ finSec.ledger.name }}</th>
+            <th colspan="3">{{ budSec.ledger.name }}</th>
+          </tr>
+          <tr>
+            <th>会计科目</th>
+            <th>借方金额</th>
+            <th>贷方金额</th>
+            <th>会计科目</th>
+            <th>借方金额</th>
+            <th>贷方金额</th>
+          </tr>
+        </thead>
+        <thead v-else>
+          <tr>
+            <th class="c-summary">摘要</th>
+            <th>会计科目</th>
+            <th>借方金额</th>
+            <th>贷方金额</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr v-for="i in rowIndexes" :key="i">
+            <td class="c-summary">
+              <el-input
+                :model-value="summaryOf(i)"
+                :disabled="readonly"
+                @update:model-value="(v: string) => setSummary(i, v)"
+                @focus="focusRow(i)"
+              />
+              <button v-if="!readonly" class="row-del no-print" title="删除本行" @click="removeRow(i)">✕</button>
+            </td>
+
+            <td>
+              <AccountSelect
+                v-model="finSec.rows[i].account_id"
+                :ledger-id="finSec.ledger.id"
+                :disabled="readonly"
+                placeholder=""
+                @change="onAccount(finSec.rows[i])"
+              />
+              <div v-if="book.auxTypesOf(finSec.rows[i].account_id).length" class="aux">
+                <AuxSelect
+                  v-for="t in book.auxTypesOf(finSec.rows[i].account_id)"
+                  :key="t.id"
+                  v-model="finSec.rows[i].aux[t.id]"
+                  :type-id="t.id"
+                  :placeholder="'选择' + t.name"
+                  :disabled="readonly"
+                  size="small"
+                />
+              </div>
+            </td>
+            <td>
+              <el-input
+                v-model="finSec.rows[i].debit"
+                class="amount"
+                :disabled="readonly"
+                @input="onAmountInput(finSec.rows[i], 'debit')"
+                @blur="normalize(finSec.rows[i], 'debit')"
+                @keydown="(e: any) => autoBalance(e, finSec, finSec.rows[i], 'debit')"
+              />
+            </td>
+            <td>
+              <el-input
+                v-model="finSec.rows[i].credit"
+                class="amount"
+                :disabled="readonly"
+                @input="onAmountInput(finSec.rows[i], 'credit')"
+                @blur="normalize(finSec.rows[i], 'credit')"
+                @keydown="(e: any) => autoBalance(e, finSec, finSec.rows[i], 'credit')"
+              />
+            </td>
+
+            <template v-if="book.multiLedger">
               <td>
-                <AccountSelect v-model="r.account_id" :ledger-id="s.ledger.id" :disabled="readonly" placeholder="" @change="onAccount(r)" />
-                <div v-if="book.auxTypesOf(r.account_id).length" class="aux">
-                  <AuxSelect v-for="t in book.auxTypesOf(r.account_id)" :key="t.id" v-model="r.aux[t.id]" :type-id="t.id" :placeholder="'选择' + t.name" :disabled="readonly" size="small" />
+                <AccountSelect
+                  v-model="budSec.rows[i].account_id"
+                  :ledger-id="budSec.ledger.id"
+                  :disabled="readonly"
+                  placeholder=""
+                  @change="onAccount(budSec.rows[i])"
+                />
+                <div v-if="book.auxTypesOf(budSec.rows[i].account_id).length" class="aux">
+                  <AuxSelect
+                    v-for="t in book.auxTypesOf(budSec.rows[i].account_id)"
+                    :key="t.id"
+                    v-model="budSec.rows[i].aux[t.id]"
+                    :type-id="t.id"
+                    :placeholder="'选择' + t.name"
+                    :disabled="readonly"
+                    size="small"
+                  />
                 </div>
               </td>
               <td>
-                <el-input v-model="r.debit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'debit')" @blur="normalize(r, 'debit')" @keydown="(e: any) => autoBalance(e, s, r, 'debit')" />
+                <el-input
+                  v-model="budSec.rows[i].debit"
+                  class="amount"
+                  :disabled="readonly"
+                  @input="onAmountInput(budSec.rows[i], 'debit')"
+                  @blur="normalize(budSec.rows[i], 'debit')"
+                  @keydown="(e: any) => autoBalance(e, budSec, budSec.rows[i], 'debit')"
+                />
               </td>
               <td>
-                <el-input v-model="r.credit" class="amount" :disabled="readonly" @input="onAmountInput(r, 'credit')" @blur="normalize(r, 'credit')" @keydown="(e: any) => autoBalance(e, s, r, 'credit')" />
+                <el-input
+                  v-model="budSec.rows[i].credit"
+                  class="amount"
+                  :disabled="readonly"
+                  @input="onAmountInput(budSec.rows[i], 'credit')"
+                  @blur="normalize(budSec.rows[i], 'credit')"
+                  @keydown="(e: any) => autoBalance(e, budSec, budSec.rows[i], 'credit')"
+                />
               </td>
-              <td class="center no-print">
-                <el-button v-if="!readonly" link type="danger" tabindex="-1" @click="removeRow(s, i)">✕</el-button>
-              </td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3">
-                合计：{{ toChinese(totals[si].debit) }}
-                <el-tag v-if="totals[si].debit !== totals[si].credit" type="danger" size="small" disable-transitions style="margin-left: 8px">
-                  借贷差额 {{ fmtCents(totals[si].debit - totals[si].credit) }}
+            </template>
+          </tr>
+        </tbody>
+
+        <tfoot>
+          <tr>
+            <td colspan="2" class="upper">
+              {{ toChinese(totalFin.debit) }}
+              <el-tag v-if="totalFin.debit !== totalFin.credit" type="danger" size="small" disable-transitions style="margin-left: 8px">
+                借贷差额 {{ fmtCents(totalFin.debit - totalFin.credit) }}
+              </el-tag>
+            </td>
+            <td class="num">{{ fmtCents(totalFin.debit) }}</td>
+            <td class="num">{{ fmtCents(totalFin.credit) }}</td>
+            <template v-if="book.multiLedger">
+              <td class="upper">
+                {{ toChinese(totalBud.debit) }}
+                <el-tag v-if="totalBud.debit !== totalBud.credit" type="danger" size="small" disable-transitions style="margin-left: 8px">
+                  差额 {{ fmtCents(totalBud.debit - totalBud.credit) }}
                 </el-tag>
               </td>
-              <td class="num">{{ fmtCents(totals[si].debit) }}</td>
-              <td class="num">{{ fmtCents(totals[si].credit) }}</td>
-              <td class="no-print"></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+              <td class="num">{{ fmtCents(totalBud.debit) }}</td>
+              <td class="num">{{ fmtCents(totalBud.credit) }}</td>
+            </template>
+          </tr>
+        </tfoot>
+      </table>
+
+      <AttachBar ref="attachRef" :base="book.base" :voucher-id="id" :readonly="readonly" :max="20" />
 
       <div class="foot muted">
         <span>制单人：{{ loaded?.created_by_name || '' }}</span>
         <span>审核人：{{ loaded?.reviewed_by_name || '' }}</span>
-        <span class="no-print">提示：金额格按 “=” 自动找平；光标进入最后一行自动加行</span>
+        <span class="no-print">提示：金额格按 “=” 自动找平；光标进入最后一行自动加行；行悬停可删除</span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.voucher { max-width: 1100px; margin: 0 auto; }
+/* 单表版式：财务会计与预算会计共用一行，摘要列共享。
+   每列宽度可在 96 / auto / 104 三档间伸缩，窄屏时整表横向滚动而不是挤压科目列。 */
+.voucher { max-width: 1680px; min-width: 960px; margin: 0 auto; }
 .title { text-align: center; font-size: 20px; letter-spacing: 6px; margin: 4px 0 14px; }
 .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .unit { flex: 1; text-align: center; }
-.section + .section { margin-top: 18px; }
-.section-title { font-weight: 600; margin-bottom: 6px; padding-left: 8px; border-left: 3px solid var(--el-color-primary); }
-.entry td { padding: 2px; }
+
+.entry { table-layout: fixed; }
+.entry th, .entry td { box-sizing: border-box; }
+.entry th { padding: 7px 6px; font-weight: 600; }
+.entry td { padding: 2px; position: relative; }
 .entry tfoot td { padding: 8px 10px; }
+.entry .c-summary { background: #fafbfc; }
+.entry tfoot .upper { font-weight: 600; }
+.entry tfoot .num { font-weight: 600; }
+
+.entry :deep(.el-input), .entry :deep(.el-select) { width: 100%; min-width: 0; }
+.entry :deep(.el-input__wrapper), .entry :deep(.el-select__wrapper) { box-shadow: none !important; background: transparent; }
+.entry :deep(.el-input__wrapper.is-focus), .entry :deep(.el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset !important;
+}
+.entry :deep(.amount input) { text-align: right; font-variant-numeric: tabular-nums; }
+
 .aux { display: flex; gap: 4px; padding: 0 4px 4px; }
+.aux :deep(.el-select) { min-width: 0; }
 .aux :deep(.el-select__wrapper) { background: #f6f8fb !important; }
 .aux :deep(.el-select__placeholder.is-transparent) { color: #e6a23c; }
-.entry :deep(.el-input__wrapper), .entry :deep(.el-select__wrapper) { box-shadow: none !important; background: transparent; }
-.entry :deep(.el-input__wrapper.is-focus), .entry :deep(.el-select__wrapper.is-focused) { box-shadow: 0 0 0 1px var(--el-color-primary) inset !important; }
-.entry :deep(.amount input) { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 删除按钮：不占列宽，鼠标移到行上才出现 */
+.row-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 14px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--el-color-danger);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.entry tbody tr:hover .row-del { opacity: 1; }
+
 .foot { display: flex; gap: 40px; margin-top: 12px; font-size: 13px; }
+
+/* 打印：7 列在 A4 纵向放不下，固定横向；两本账簿各占半张纸。 */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+  .voucher {
+    max-width: none;
+    min-width: 0;
+  }
+  .entry th, .entry td {
+    padding: 2px 3px;
+    font-size: 11px;
+  }
+  .entry tr {
+    break-inside: avoid;
+  }
+  tfoot {
+    break-inside: avoid;
+  }
+}
 </style>

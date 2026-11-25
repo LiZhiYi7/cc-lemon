@@ -34,7 +34,7 @@ async function submit() {
 <template>
   <div class="login">
     <div class="box card">
-      <h1>柠檬账</h1>
+      <h1>阳和财务系统</h1>
       <p class="muted">{{ initialized ? '局域网财务系统' : '首次使用，请创建系统管理员' }}</p>
       <el-form label-position="top" @submit.prevent="submit">
         <el-form-item label="用户名"><el-input v-model="form.username" autofocus /></el-form-item>

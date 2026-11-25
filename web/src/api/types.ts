@@ -79,3 +79,15 @@ export interface ClosingStatus {
   applicable: boolean; pending: boolean; amount: string; voucher_ids: number[]
 }
 export interface CheckItem { name: string; ok: boolean; blocking: boolean; message: string }
+
+/** 凭证图片（附件）。文件存在服务器目录，数据库里没有对应表。 */
+export interface Attachment {
+  id: string
+  name: string
+  mime: string
+  size: number
+  thumb?: string
+  uploaded_by: number
+  uploaded_by_name: string
+  uploaded_at: string
+}

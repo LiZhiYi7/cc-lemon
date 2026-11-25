@@ -1,4 +1,4 @@
-module github.com/lizhiyi7/cc-lemon
+module github.com/lizhiyi7/yanghe-finance
 
 go 1.26.0
 

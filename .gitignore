@@ -10,3 +10,9 @@ node_modules/
 /build/
 /dist/
 /deploy/windows/vendor/
+
+# 凭证附件（运行时生成）
+/data/
+
+# IDE 本地配置
+.vscode/

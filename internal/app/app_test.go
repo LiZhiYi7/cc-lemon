@@ -5,30 +5,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lizhiyi7/cc-lemon/internal/app"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/config"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/app"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/config"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
 )
 
 // 端到端测试：经真实路由与 PostgreSQL 走通核心账务流程。
-// 需设置 LEMON_TEST_DSN 指向一个可清空的测试库，否则跳过。
+// 需设置 YANGHE_FINANCE_TEST_DSN 指向一个可清空的测试库，否则跳过。
 
 type client struct {
 	t     *testing.T
 	h     http.Handler
 	token string
+	files string // 附件根目录（每个测试独立的临时目录）
 }
 
 func newClient(t *testing.T) *client {
-	dsn := os.Getenv("LEMON_TEST_DSN")
+	dsn := os.Getenv("YANGHE_FINANCE_TEST_DSN")
 	if dsn == "" {
-		t.Skip("未设置 LEMON_TEST_DSN")
+		t.Skip("未设置 YANGHE_FINANCE_TEST_DSN")
 	}
 	ctx := context.Background()
 	d, err := db.Open(ctx, dsn, 4)
@@ -41,11 +44,16 @@ func newClient(t *testing.T) *client {
 	}
 	cfg := &config.Config{}
 	cfg.Auth.TokenTTL = time.Hour
+	// 附件写到临时目录，避免测试往仓库里丢文件。
+	fileDir := t.TempDir()
+	cfg.Storage.Dir = fileDir
+	cfg.Storage.MaxFileMB = 10
+	cfg.Storage.MaxFiles = 20
 	h, err := app.New(ctx, cfg, d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &client{t: t, h: h}
+	c := &client{t: t, h: h, files: fileDir}
 	c.must("POST", "/setup", map[string]any{"username": "admin", "password": "secret1"}, nil)
 	c.login("admin", "secret1")
 	return c
@@ -833,5 +841,139 @@ func TestImport(t *testing.T) {
 	}}, &res)
 	if res.Applied || len(res.Errors) != 1 || res.Errors[0].Row != 2 {
 		t.Fatalf("缺少客户应报错: %+v", res)
+	}
+}
+
+// ---- 凭证图片（附件）----
+
+// 1x1 透明 PNG，够 http.DetectContentType 认出 image/png。
+var tinyPNG = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+	0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+	0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+	0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
+	0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+	0x42, 0x60, 0x82,
+}
+
+func (c *client) uploadMultipart(path, fileName string, data []byte, out any) (int, string) {
+	c.t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", fileName)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	_, _ = fw.Write(data)
+	tw, err := mw.CreateFormFile("thumb", "thumb.jpg")
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	_, _ = tw.Write(data)
+	_ = mw.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1"+path, &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	rec := httptest.NewRecorder()
+	c.h.ServeHTTP(rec, req)
+	if out != nil && rec.Code < 300 {
+		if err := json.Unmarshal(rec.Body.Bytes(), out); err != nil {
+			c.t.Fatalf("解析上传响应失败: %v\n%s", err, rec.Body.String())
+		}
+	}
+	return rec.Code, rec.Body.String()
+}
+
+func (c *client) getRaw(path string) (int, []byte, string) {
+	c.t.Helper()
+	req := httptest.NewRequest("GET", "/api/v1"+path, nil)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	rec := httptest.NewRecorder()
+	c.h.ServeHTTP(rec, req)
+	return rec.Code, rec.Body.Bytes(), rec.Header().Get("Content-Type")
+}
+
+func TestVoucherAttachments(t *testing.T) {
+	c := newClient(t)
+	e := c.newBook("small_enterprise", 2026, 1)
+	v := e.post("2026-01-10", line{"1001", "100", ""}, line{"1002", "", "100"})
+	base := fmt.Sprintf("%s/vouchers/%d/attachments", e.base, v.ID)
+
+	var item struct {
+		ID   string
+		Name string
+		Size int64
+		Mime string
+	}
+	if code, resp := c.uploadMultipart(base, "发票样本.png", tinyPNG, &item); code != 200 {
+		t.Fatalf("上传图片 → %d: %s", code, resp)
+	}
+	if len(item.ID) != 32 {
+		t.Fatalf("附件 ID 不是 32 位十六进制：%q", item.ID)
+	}
+	if item.Size != int64(len(tinyPNG)) {
+		t.Fatalf("记录的大小 %d 与实际 %d 不一致", item.Size, len(tinyPNG))
+	}
+	if item.Name != "发票样本.png" {
+		t.Fatalf("原始文件名未保留：%q", item.Name)
+	}
+
+	var list []struct{ ID string }
+	c.must("GET", base, nil, &list)
+	if len(list) != 1 || list[0].ID != item.ID {
+		t.Fatalf("列表应恰好 1 条，实际 %d 条", len(list))
+	}
+
+	code, body, ctype := c.getRaw(base + "/" + item.ID)
+	if code != 200 {
+		t.Fatalf("取图片 → %d", code)
+	}
+	if ctype != "image/png" {
+		t.Fatalf("Content-Type 应为 image/png，实际 %q", ctype)
+	}
+	if !bytes.Equal(body, tinyPNG) {
+		t.Fatalf("取回的字节与原图不一致")
+	}
+	if code, _, _ := c.getRaw(base + "/" + item.ID + "?thumb=1"); code != 200 {
+		t.Fatalf("取缩略图 → %d", code)
+	}
+
+	// 非图片被拒绝
+	if code, _ := c.uploadMultipart(base, "note.png", []byte("这不是图片"), nil); code != 400 {
+		t.Fatalf("上传非图片应 400，实际 %d", code)
+	}
+
+	// 审核后不能再增删
+	c.must("POST", e.base+"/vouchers/review", map[string]any{"ids": []int64{v.ID}, "reviewed": true}, nil)
+	if code, resp := c.uploadMultipart(base, "x.png", tinyPNG, nil); code != 409 {
+		t.Fatalf("已审核上传应 409，实际 %d: %s", code, resp)
+	}
+	c.expect(409, "DELETE", base+"/"+item.ID, nil)
+	c.must("POST", e.base+"/vouchers/review", map[string]any{"ids": []int64{v.ID}, "reviewed": false}, nil)
+
+	c.expect(204, "DELETE", base+"/"+item.ID, nil)
+	c.must("GET", base, nil, &list)
+	if len(list) != 0 {
+		t.Fatalf("删除后列表应为空，实际 %d 条", len(list))
+	}
+
+	// 删凭证时附件目录一并清掉
+	var again struct{ ID string }
+	c.uploadMultipart(base, "y.png", tinyPNG, &again)
+	dirs, _ := filepath.Glob(filepath.Join(c.files, "attachments", "*", fmt.Sprint(v.ID)))
+	if len(dirs) != 1 {
+		t.Fatalf("上传后应存在附件目录，实际匹配 %d 个", len(dirs))
+	}
+	c.expect(204, "DELETE", fmt.Sprintf("%s/vouchers/%d", e.base, v.ID), nil)
+	if dirs, _ = filepath.Glob(filepath.Join(c.files, "attachments", "*", fmt.Sprint(v.ID))); len(dirs) != 0 {
+		t.Fatalf("删除凭证后附件目录应被清理，仍残留 %v", dirs)
 	}
 }

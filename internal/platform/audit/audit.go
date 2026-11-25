@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/lizhiyi7/cc-lemon/internal/platform/auth"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/auth"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
 )
 
 func Log(ctx context.Context, d *db.DB, bookID int64, action, entity string, entityID any, detail any) {

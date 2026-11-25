@@ -1,4 +1,4 @@
-﻿# 柠檬账 · 防火墙规则
+﻿# 阳和财务系统 · 防火墙规则
 # 作为库被 start.ps1 点引用；被提权单独调用时（-AppPort）只做加规则这一件事。
 
 [CmdletBinding()]
@@ -14,7 +14,7 @@ function Test-IsAdmin {
 
 function Get-FirewallRuleName {
     param([Parameter(Mandatory)][int]$AppPort)
-    return ('柠檬账-正式使用-TCP{0}' -f $AppPort)
+    return ('阳和财务系统-正式使用-TCP{0}' -f $AppPort)
 }
 
 function Test-FirewallRule {
@@ -29,6 +29,9 @@ function Add-FirewallRule {
     param([Parameter(Mandatory)][int]$AppPort)
 
     $name = Get-FirewallRuleName -AppPort $AppPort
+    # 旧版本（柠檬账）的规则名不同，升级后会残留一条同端口的规则；
+    # 这里先按旧名删一次，避免防火墙上出现两条看不出关系的规则。
+    & netsh.exe advfirewall firewall delete rule name="柠檬账-正式使用-TCP$AppPort" > $null 2>&1
     & netsh.exe advfirewall firewall delete rule name="$name" > $null 2>&1
     & netsh.exe advfirewall firewall add rule name="$name" dir=in action=allow `
         protocol=TCP localport=$AppPort profile=private,domain > $null 2>&1

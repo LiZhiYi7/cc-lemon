@@ -20,18 +20,18 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: lemon_test
-          POSTGRES_USER: lemon
-          POSTGRES_PASSWORD: lemon
+          POSTGRES_DB: yanghe_finance_test
+          POSTGRES_USER: yanghe_finance
+          POSTGRES_PASSWORD: yanghe_finance
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U lemon -d lemon_test"
+          --health-cmd "pg_isready -U yanghe_finance -d yanghe_finance_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
     env:
-      LEMON_TEST_DSN: postgres://lemon:lemon@localhost:5432/lemon_test?sslmode=disable
+      YANGHE_FINANCE_TEST_DSN: postgres://yanghe_finance:yanghe_finance@localhost:5432/yanghe_finance_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
 

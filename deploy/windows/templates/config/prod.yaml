@@ -1,4 +1,4 @@
-# 正式使用配置（局域网内其他电脑可访问）
+﻿# 正式使用配置（局域网内其他电脑可访问）
 # 端口如需修改，改这里的 addr，启动脚本会自动识别并同步防火墙规则。
 server:
   addr: "0.0.0.0:8080"
@@ -16,3 +16,9 @@ standards:
   # 本交付版本只开放「政府会计制度（行政事业单位）」。
   # 如需同时开放小企业会计准则，改成：allow: ["gov_accounting", "small_enterprise"]
   allow: ["gov_accounting"]
+
+storage:
+  # 附件目录由启动脚本注入绝对路径（attachments\<模式>），这里留空即可。
+  dir: ""
+  max_file_mb: 10
+  max_files: 20

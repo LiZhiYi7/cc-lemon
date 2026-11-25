@@ -70,5 +70,5 @@ async function resetPassword(u: User) {
 </template>
 
 <style scoped>
-.topbar { height: 52px; background: #fff; border-bottom: 1px solid var(--lemon-border); display: flex; align-items: center; padding: 0 20px; }
+.topbar { height: 52px; background: #fff; border-bottom: 1px solid var(--yanghe-border); display: flex; align-items: center; padding: 0 20px; }
 </style>

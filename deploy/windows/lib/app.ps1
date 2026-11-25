@@ -1,7 +1,7 @@
-﻿# 柠檬账 · 应用进程封装
+﻿# 阳和财务系统 · 应用进程封装
 # 依赖 common.ps1 已点引用。
 
-function Start-LemonApp {
+function Start-YangheApp {
     param(
         [Parameter(Mandatory)]$Paths,
         [Parameter(Mandatory)]$Endpoint,
@@ -18,12 +18,13 @@ function Start-LemonApp {
     $errLog = Join-Path $Paths.LogDir ('app-' + $stamp + '.log')
     $outLog = Join-Path $Paths.LogDir ('app-' + $stamp + '.out.log')
 
-    $env:LEMON_CONFIG = $Paths.Config
-    $env:LEMON_SERVER_ADDR = $Endpoint.Addr
-    $env:LEMON_SERVER_STATIC_DIR = $Paths.Web
-    $env:LEMON_DATABASE_DSN = $dsn
+    $env:YANGHE_FINANCE_CONFIG = $Paths.Config
+    $env:YANGHE_FINANCE_SERVER_ADDR = $Endpoint.Addr
+    $env:YANGHE_FINANCE_SERVER_STATIC_DIR = $Paths.Web
+    $env:YANGHE_FINANCE_DATABASE_DSN = $dsn
+    $env:YANGHE_FINANCE_STORAGE_DIR = $Paths.Attachments
 
-    Write-Step '启动柠檬账服务'
+    Write-Step '启动阳和财务系统服务'
     $proc = Invoke-WithCleanEnv {
         Start-Process -FilePath $Paths.Exe -WorkingDirectory $Paths.Root -PassThru `
             -RedirectStandardOutput $outLog -RedirectStandardError $errLog
@@ -68,7 +69,7 @@ function Show-AppLogTail {
     Show-LogTail -Path $App.Log -Lines $Lines
 }
 
-function Stop-LemonApp {
+function Stop-YangheApp {
     param(
         [Parameter(Mandatory)]$Paths,
         # 外部脚本（停止/恢复）调用时为真：先撤销会话标记，
@@ -80,7 +81,7 @@ function Stop-LemonApp {
         Remove-Item -LiteralPath $Paths.SessionFile -Force -ErrorAction SilentlyContinue
     }
 
-    $procId = Get-LemonPid -Paths $Paths
+    $procId = Get-YanghePid -Paths $Paths
     if ($procId -eq 0) {
         Remove-Item -LiteralPath $Paths.PidFile -Force -ErrorAction SilentlyContinue
         return $false
@@ -105,7 +106,7 @@ function Stop-LemonApp {
     return $true
 }
 
-function Open-LemonBrowser {
+function Open-YangheBrowser {
     param([Parameter(Mandatory)]$Endpoint)
 
     try {

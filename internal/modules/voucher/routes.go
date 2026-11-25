@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/lizhiyi7/cc-lemon/internal/kernel"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/internal/kernel"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
 )
 
 func (s *Service) Routes(r chi.Router) {
@@ -43,6 +43,10 @@ func (s *Service) Routes(r chi.Router) {
 		}
 		return s.Get(r.Context(), bk(r).ID, id)
 	}))
+	// 凭证图片：读接口只要求账套成员（能看凭证就能看附件），
+	// 写接口挂在下方的 PermWrite 分组里。
+	r.Get("/vouchers/{voucherID}/attachments", s.listAttachments)
+	r.Get("/vouchers/{voucherID}/attachments/{attachmentID}", s.serveAttachment)
 	r.Post("/vouchers/parallel-suggest", httpx.Handle(func(r *http.Request) (any, error) {
 		in, err := httpx.Bind[struct {
 			Lines []LineInput `json:"lines"`
@@ -91,6 +95,8 @@ func (s *Service) Routes(r chi.Router) {
 			}
 			return nil, s.Renumber(r.Context(), bk(r), in)
 		}))
+		r.Post("/vouchers/{voucherID}/attachments", s.uploadAttachment)
+		r.Delete("/vouchers/{voucherID}/attachments/{attachmentID}", s.deleteAttachment)
 	})
 
 	r.With(book.Require(PermReview)).Post("/vouchers/review", httpx.Handle(func(r *http.Request) (any, error) {

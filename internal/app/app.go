@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,21 +14,22 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/lizhiyi7/cc-lemon/configs"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/account"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/auxiliary"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/book"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/closing"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/dataio"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/iam"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/ledger"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/report"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/standard"
-	"github.com/lizhiyi7/cc-lemon/internal/modules/voucher"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/config"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/db"
-	"github.com/lizhiyi7/cc-lemon/internal/platform/httpx"
-	"github.com/lizhiyi7/cc-lemon/migrations"
+	"github.com/lizhiyi7/yanghe-finance/configs"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/account"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/auxiliary"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/book"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/closing"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/dataio"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/iam"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/ledger"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/report"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/standard"
+	"github.com/lizhiyi7/yanghe-finance/internal/modules/voucher"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/config"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/db"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/filestore"
+	"github.com/lizhiyi7/yanghe-finance/internal/platform/httpx"
+	"github.com/lizhiyi7/yanghe-finance/migrations"
 )
 
 // New 执行数据库迁移、装配模块并返回 HTTP 处理器。
@@ -59,7 +61,20 @@ func New(ctx context.Context, cfg *config.Config, d *db.DB) (http.Handler, error
 		return nil, err
 	}
 	ledgers := ledger.New(d, books, accounts, aux)
-	vouchers := voucher.New(d, books, accounts, aux)
+	maxMB := cfg.Storage.MaxFileMB
+	if maxMB <= 0 {
+		maxMB = 10
+	}
+	maxFiles := cfg.Storage.MaxFiles
+	if maxFiles <= 0 {
+		maxFiles = 20
+	}
+	// 附件目录不可写只关闭图片功能，不影响记账主流程。
+	files := filestore.New(cfg.Storage.Dir, int64(maxMB)<<20, maxFiles)
+	if !files.Enabled() {
+		slog.Warn("凭证附件目录不可用，图片功能已关闭", "dir", cfg.Storage.Dir)
+	}
+	vouchers := voucher.New(d, books, accounts, aux, files)
 	closings := closing.New(d, books, ledgers, vouchers, aux)
 	reports := report.New(d, books, ledgers, aux, closings)
 	imports := dataio.New(d, books, accounts, aux, ledgers)

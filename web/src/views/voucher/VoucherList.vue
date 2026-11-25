@@ -143,5 +143,5 @@ const open = (v: Voucher) => router.push(`/b/${detail.id}/vouchers/${v.id}`)
 </template>
 
 <style scoped>
-tbody + tbody tr:first-child td { border-top: 2px solid var(--lemon-border); }
+tbody + tbody tr:first-child td { border-top: 2px solid var(--yanghe-border); }
 </style>
